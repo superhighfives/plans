@@ -1,0 +1,26 @@
+# Copy to `.dev.vars` for local development (`.dev.vars` is gitignored).
+# In production these are set with `wrangler secret put <NAME>`.
+
+# --- GitHub App ---
+# From the App's settings page (https://github.com/settings/apps/<your-app>).
+GITHUB_APP_ID="123456"
+GITHUB_APP_CLIENT_ID="Iv1.xxxxxxxxxxxxxxxx"
+GITHUB_APP_CLIENT_SECRET="xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+# The full PEM contents of the App private key (.pem you downloaded).
+# Both PKCS#1 ("BEGIN RSA PRIVATE KEY") and PKCS#8 ("BEGIN PRIVATE KEY") work.
+# Keep the newlines — with wrangler you can paste multi-line values via `secret put`.
+GITHUB_APP_PRIVATE_KEY="-----BEGIN RSA PRIVATE KEY-----\n...\n-----END RSA PRIVATE KEY-----\n"
+# The webhook secret configured on the App.
+GITHUB_WEBHOOK_SECRET="a-long-random-string"
+
+# --- App session / crypto ---
+# 32+ random bytes, base64. Signs session and OAuth-state cookies.
+#   openssl rand -base64 48
+SESSION_SECRET="base64-random-secret"
+# Exactly 32 random bytes, base64. AES-256-GCM key for installation-token cache.
+#   openssl rand -base64 32
+TOKEN_ENCRYPTION_KEY="base64-32-byte-key"
+
+# The public origin of the deployment (no trailing slash). Used to build the
+# OAuth redirect URI and to validate webhook/CSRF origins.
+APP_URL="http://localhost:5173"
