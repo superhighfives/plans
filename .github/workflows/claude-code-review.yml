@@ -1,0 +1,27 @@
+name: Claude Code Review
+
+on:
+  pull_request:
+    types: [opened, synchronize, ready_for_review, reopened]
+
+# Required — a called workflow can only narrow the caller's permissions, never
+# widen them. Omitting this fails the run at startup with no explanation.
+permissions:
+  contents: read
+  pull-requests: write
+  issues: write
+  id-token: write
+  actions: read
+
+jobs:
+  review:
+    uses: superhighfives/control-room/.github/workflows/review.yml@main
+    with:
+      # npm project — install so the reviewer can run the real checks.
+      setup_command: npm ci
+      verify_commands: |
+        npm run typecheck
+        npm test
+        npm run build
+    secrets:
+      CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
