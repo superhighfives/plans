@@ -114,13 +114,35 @@ for s in GITHUB_APP_ID GITHUB_APP_CLIENT_ID GITHUB_APP_CLIENT_SECRET \
 - `GITHUB_APP_PRIVATE_KEY` — paste the full `.pem` (PKCS#1 or PKCS#8 both work)
 - `APP_URL` — the public origin, no trailing slash (e.g. `https://plans.example.com`)
 
-### 4. Run / deploy
+### 4. Run locally
 
 ```bash
 npm install
 npm run db:migrate:local   # apply migrations to local D1
 npm run dev                # http://localhost:5173
-# ...
+```
+
+### 5. Deploy
+
+Pushes to `main` deploy automatically via GitHub Actions
+(`.github/workflows/deploy.yml`). The workflow waits for **CI** to pass on the
+commit, then applies pending D1 migrations (`--remote`) and runs
+`wrangler deploy`.
+
+For CI deploys to work, add two **repository secrets** (Settings → Secrets and
+variables → Actions):
+
+- `CLOUDFLARE_API_TOKEN` — scoped token with **Workers Scripts: Edit** and
+  **D1: Edit** permissions.
+- `CLOUDFLARE_ACCOUNT_ID` — your Cloudflare account ID.
+
+The Worker secrets from step 3 and the D1 `database_id` are set once (as above)
+and persist across deploys — CI never touches them.
+
+To deploy by hand instead (e.g. the very first deploy, before the workflow is on
+`main`):
+
+```bash
 npm run deploy             # build + wrangler deploy
 ```
 
@@ -130,7 +152,7 @@ npm run deploy             # build + wrangler deploy
 | --- | --- |
 | `npm run dev` | Local dev server (Vite + Workers runtime) |
 | `npm run build` | Production build (also regenerates the route tree) |
-| `npm run deploy` | Build and deploy to Cloudflare |
+| `npm run deploy` | Build and deploy to Cloudflare (manual; CI deploys on push to `main`) |
 | `npm run typecheck` | `tsc --noEmit` |
 | `npm test` | Unit tests (frontmatter, plan paths, crypto) |
 | `npm run db:generate` | Generate a D1 migration from the schema |
