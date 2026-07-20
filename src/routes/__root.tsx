@@ -14,7 +14,7 @@ export const Route = createRootRoute({
     meta: [
       { charSet: 'utf-8' },
       { name: 'viewport', content: 'width=device-width, initial-scale=1' },
-      { title: 'Planning CMS' },
+      { title: 'Plans' },
       {
         name: 'description',
         content: 'Browse the plans/ directories across your GitHub repos.',
@@ -44,7 +44,7 @@ function Header({ user }: { user: CurrentUser | null }) {
       <div className="container site-header__inner">
         <Link to="/" className="brand">
           <span className="brand__mark" aria-hidden>◇</span>
-          <span>Planning CMS</span>
+          <span>Plans</span>
         </Link>
         <div className="site-header__right">
           {user ? (

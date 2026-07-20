@@ -1,4 +1,4 @@
-# Planning CMS
+# Plans
 
 A multi-tenant web app on Cloudflare that reads the `plans/` directories across
 your GitHub repos (the ones that use the [`planning`](plans/ready/planning-cms.md)
@@ -93,7 +93,7 @@ Then **Install** the App on your account or an org.
 ### 2. Create the D1 database
 
 ```bash
-npx wrangler d1 create planning-cms
+npx wrangler d1 create plans
 # Copy the printed database_id into wrangler.jsonc (replace REPLACE_WITH_D1_DATABASE_ID)
 npm run db:migrate:remote   # apply migrations to the remote D1
 ```

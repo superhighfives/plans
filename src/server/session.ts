@@ -29,11 +29,11 @@ function isSecure(env: AppEnv): boolean {
 }
 
 function sessionCookieName(env: AppEnv): string {
-  return isSecure(env) ? '__Host-pcms_session' : 'pcms_session'
+  return isSecure(env) ? '__Host-plans_session' : 'plans_session'
 }
 
 function oauthCookieName(env: AppEnv): string {
-  return isSecure(env) ? '__Host-pcms_oauth' : 'pcms_oauth'
+  return isSecure(env) ? '__Host-plans_oauth' : 'plans_oauth'
 }
 
 function cookieAttrs(env: AppEnv, maxAge: number): string {

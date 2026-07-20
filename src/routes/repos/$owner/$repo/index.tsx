@@ -9,7 +9,7 @@ export const Route = createFileRoute('/repos/$owner/$repo/')({
   loader: ({ params }): Promise<RepoPlans> =>
     getRepoPlans({ data: { owner: params.owner, repo: params.repo } }),
   head: ({ params }) => ({
-    meta: [{ title: `${params.owner}/${params.repo} · Planning CMS` }],
+    meta: [{ title: `${params.owner}/${params.repo} · Plans` }],
   }),
   component: RepoPage,
 })

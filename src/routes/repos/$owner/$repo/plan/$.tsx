@@ -11,7 +11,7 @@ export const Route = createFileRoute('/repos/$owner/$repo/plan/$')({
       data: { owner: params.owner, repo: params.repo, path: params._splat ?? '' },
     }),
   head: ({ loaderData }) => ({
-    meta: [{ title: loaderData ? `${loaderData.title} · Planning CMS` : 'Plan' }],
+    meta: [{ title: loaderData ? `${loaderData.title} · Plans` : 'Plan' }],
   }),
   component: PlanPage,
 })

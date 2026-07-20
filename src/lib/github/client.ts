@@ -1,5 +1,5 @@
 const GITHUB_API = 'https://api.github.com'
-const USER_AGENT = 'planning-cms'
+const USER_AGENT = 'plans'
 
 export class GitHubError extends Error {
   constructor(

@@ -28,7 +28,7 @@ function Landing() {
     <section className="hero">
       <h1>Your plans, everywhere.</h1>
       <p className="hero__lead">
-        Planning CMS reads the <code>plans/</code> directories across your GitHub
+        Plans reads the <code>plans/</code> directories across your GitHub
         repos and lets you browse them by state — backlog, ready, in progress,
         and done — all in one place.
       </p>
@@ -77,7 +77,7 @@ function DashboardView({ dashboard }: { dashboard: Dashboard }) {
         <div className="empty">
           <h2>No installations yet</h2>
           <p>
-            Install the Planning CMS GitHub App on your account or an org, then
+            Install the Plans GitHub App on your account or an org, then
             rescan. Only repos with a top-level <code>plans/</code> folder show up.
           </p>
         </div>

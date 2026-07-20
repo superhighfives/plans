@@ -1,5 +1,5 @@
 {
-  "name": "planning-cms",
+  "name": "plans",
   "version": "0.1.0",
   "private": true,
   "type": "module",
@@ -12,8 +12,8 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "db:generate": "drizzle-kit generate",
-    "db:migrate:local": "wrangler d1 migrations apply planning-cms --local",
-    "db:migrate:remote": "wrangler d1 migrations apply planning-cms --remote",
+    "db:migrate:local": "wrangler d1 migrations apply plans --local",
+    "db:migrate:remote": "wrangler d1 migrations apply plans --remote",
     "cf-typegen": "wrangler types"
   },
   "dependencies": {

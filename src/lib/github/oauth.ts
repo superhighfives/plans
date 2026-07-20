@@ -35,7 +35,7 @@ export async function exchangeCodeForToken(env: AppEnv, code: string): Promise<s
     headers: {
       Accept: 'application/json',
       'Content-Type': 'application/json',
-      'User-Agent': 'planning-cms',
+      'User-Agent': 'plans',
     },
     body: JSON.stringify({
       client_id: env.GITHUB_APP_CLIENT_ID,
@@ -61,7 +61,7 @@ export async function fetchAuthedUser(token: string): Promise<GitHubUser> {
       Authorization: `Bearer ${token}`,
       Accept: 'application/vnd.github+json',
       'X-GitHub-Api-Version': '2022-11-28',
-      'User-Agent': 'planning-cms',
+      'User-Agent': 'plans',
     },
   })
   if (!res.ok) throw new GitHubError('Failed to fetch GitHub user', res.status)
