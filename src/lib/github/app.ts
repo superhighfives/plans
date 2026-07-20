@@ -27,6 +27,11 @@ export async function getInstallationToken(
   const cached = await readCachedToken(env, installation)
   if (cached) return cached
 
+  // The cache check uses the caller's (possibly stale) row, so two concurrent
+  // requests racing past an expired cache can both mint a token and both write
+  // the row. That's intentionally tolerated: GitHub allows the extra mint and
+  // last-write-wins leaves a valid token cached. If this path gets hot, re-read
+  // the row (or take a lock) here before minting.
   const jwt = await createAppJwt(env.GITHUB_APP_ID, env.GITHUB_APP_PRIVATE_KEY)
   const res = await githubRequest<InstallationTokenResponse>(
     `/app/installations/${installation.githubInstallationId}/access_tokens`,

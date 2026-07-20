@@ -50,7 +50,11 @@ export const Route = createFileRoute('/api/auth/github/callback')({
           )
           headers.append('Set-Cookie', buildOAuthStateClearCookie(env))
           return new Response(null, { status: 302, headers })
-        } catch {
+        } catch (err) {
+          // Keep the user-facing failure generic (don't leak OAuth/DB details),
+          // but log the real cause so a misconfiguration — bad client secret, DB
+          // error — is visible in `wrangler tail` rather than silent in prod.
+          console.error('OAuth callback failed:', err)
           return redirectHome('/?error=oauth_failed', env, true)
         }
       },
