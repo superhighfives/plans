@@ -21,6 +21,32 @@ export interface PlanDetail extends PlanSummary {
   body: string
 }
 
+/** One selectable ref for a plan in the detail view: the default branch or a PR. */
+export interface PlanBranchTab {
+  kind: 'default' | 'pr'
+  /** PR number, or null for the default branch. */
+  number: number | null
+  /** PR title, or null for the default branch. */
+  title: string | null
+  /** github.com PR URL, or null for the default branch. */
+  url: string | null
+  draft: boolean
+  /** How this PR changes the plan ('moved' | 'modified'); null for default. */
+  changeKind: PlanChange['kind'] | null
+}
+
+/** A plan resolved at a chosen ref, plus the other refs it can be viewed at. */
+export interface PlanView {
+  /** The plan content at the active ref. */
+  plan: PlanDetail
+  /** The active PR number, or null when viewing the default branch. */
+  activePr: number | null
+  /** The default branch tab plus one per open PR that changes this plan. */
+  tabs: PlanBranchTab[]
+  /** 'no-access' when the App lacks pull_requests:read (tabs limited to main). */
+  branchActivityStatus: BranchActivityStatus
+}
+
 export interface RepoRef {
   owner: string
   name: string

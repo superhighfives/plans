@@ -212,7 +212,7 @@ function StateColumn({
         <ul className="plan-list">
           {ghosts.map((ghost) => (
             <li key={`ghost:${ghost.pr.number}:${ghost.change.slug}`}>
-              <GhostCardItem ghost={ghost} />
+              <GhostCardItem ghost={ghost} owner={owner} repo={repo} />
             </li>
           ))}
           {visible.map((plan) => (
@@ -245,7 +245,15 @@ function StateColumn({
   )
 }
 
-function GhostCardItem({ ghost }: { ghost: GhostCard }) {
+function GhostCardItem({
+  ghost,
+  owner,
+  repo,
+}: {
+  ghost: GhostCard
+  owner: string
+  repo: string
+}) {
   const { pr, change } = ghost
   const hint =
     change.kind === 'added'
@@ -253,6 +261,32 @@ function GhostCardItem({ ghost }: { ghost: GhostCard }) {
       : change.baseState
         ? `from ${PLAN_STATE_LABELS[change.baseState]}`
         : 'Moved'
+  const inner = (
+    <>
+      <span className="ghost-card__title">{change.slug}</span>
+      <span className="ghost-card__meta">
+        {hint} · #{pr.number}
+        {pr.draft ? ' · draft' : ''}
+      </span>
+    </>
+  )
+
+  // A moved plan still exists on the default branch, so we can open it in-app
+  // with the PR tab preselected. A newly-added plan only exists on the branch —
+  // there's nothing on the default branch to open — so link out to the PR.
+  if (change.kind === 'moved' && change.basePath) {
+    return (
+      <Link
+        to="/repos/$owner/$repo/plan/$"
+        params={{ owner, repo, _splat: change.basePath }}
+        search={{ pr: pr.number }}
+        className="ghost-card"
+        title={`${pr.title} — PR #${pr.number}`}
+      >
+        {inner}
+      </Link>
+    )
+  }
   return (
     <a
       className="ghost-card"
@@ -261,11 +295,7 @@ function GhostCardItem({ ghost }: { ghost: GhostCard }) {
       rel="noreferrer"
       title={`${pr.title} — PR #${pr.number}`}
     >
-      <span className="ghost-card__title">{change.slug}</span>
-      <span className="ghost-card__meta">
-        {hint} · #{pr.number}
-        {pr.draft ? ' · draft' : ''}
-      </span>
+      {inner}
     </a>
   )
 }

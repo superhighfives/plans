@@ -570,6 +570,63 @@ form {
   font-size: 14px;
 }
 
+/* Branch tabs (default branch vs open PRs that change this plan) */
+.branch-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 20px 0 12px;
+}
+.branch-tab {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 12px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--panel);
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 550;
+}
+.branch-tab:hover {
+  text-decoration: none;
+  border-color: var(--accent);
+  color: var(--text);
+}
+.branch-tab--active {
+  background: var(--accent);
+  border-color: transparent;
+  color: var(--accent-contrast);
+}
+.branch-tab__kind,
+.branch-tab__draft {
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  padding: 1px 6px;
+  border-radius: 999px;
+  background: color-mix(in srgb, currentColor 15%, transparent);
+}
+.branch-tab__kind--moved {
+  color: var(--state-in-progress);
+}
+.branch-tab--active .branch-tab__kind,
+.branch-tab--active .branch-tab__draft {
+  color: var(--accent-contrast);
+  background: color-mix(in srgb, var(--accent-contrast) 22%, transparent);
+}
+.branch-notice {
+  background: var(--panel-2);
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--accent);
+  border-radius: var(--radius-sm);
+  padding: 10px 14px;
+  font-size: 13px;
+  color: var(--muted);
+  margin: 0 0 20px;
+}
+
 .tag--state {
   color: var(--accent-contrast);
   border: none;

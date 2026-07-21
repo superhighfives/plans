@@ -11,6 +11,7 @@ import {
   fetchContentFile,
   listOpenPullRequests,
   listPlanTree,
+  type OpenPullRequest,
 } from '~/lib/github/plans'
 import { diffPlanTrees, type PlanEntry } from '~/lib/plans/diff'
 import {
@@ -20,8 +21,10 @@ import {
 import { PLAN_STATES, type PlanState, parsePlanPath } from '~/lib/plans/states'
 import type {
   BranchActivityStatus,
+  PlanBranchTab,
   PlanDetail,
   PlanSummary,
+  PlanView,
   PullRequestActivity,
   RepoPlans,
   RepoRef,
@@ -388,4 +391,145 @@ export async function loadPlanDetail(
     bodySha: file.sha,
     body: parsed.content,
   }
+}
+
+function defaultTab(): PlanBranchTab {
+  return {
+    kind: 'default',
+    number: null,
+    title: null,
+    url: null,
+    draft: false,
+    changeKind: null,
+  }
+}
+
+/** A PR whose head branch changes this specific plan (in a way we can render). */
+interface PlanBranchCandidate {
+  pr: OpenPullRequest
+  headPath: string
+  changeKind: 'moved' | 'modified'
+}
+
+/**
+ * Resolve a plan for the detail view: its content at the chosen ref (the default
+ * branch, or an open PR's head), plus one tab per open PR that changes this plan.
+ *
+ * Only PRs where the plan still exists on the head become tabs — a PR that
+ * deletes the plan has no body to show. The plan must exist on the default
+ * branch (that's how the detail page is reached); a plan that lives only on a
+ * branch is surfaced via the board's ghost card instead.
+ *
+ * PR-head content is fetched fresh and never written to planCache (that cache
+ * holds default-branch content, keyed by path). Best-effort throughout: a missing
+ * pull_requests scope or a per-PR fetch failure just narrows the tabs.
+ */
+export async function loadPlanView(
+  db: Db,
+  env: AppEnv,
+  ctx: RepoContext,
+  path: string,
+  prNumber: number | null,
+): Promise<PlanView | null> {
+  const base = await loadPlanDetail(db, env, ctx, path)
+  if (!base) return null
+
+  const info = parsePlanPath(path)
+  if (!info) return null
+
+  const { repo, installation } = ctx
+  const token = await getInstallationToken(db, env, installation)
+
+  let pulls: OpenPullRequest[]
+  try {
+    pulls = await listOpenPullRequests(token, repo.owner, repo.name)
+  } catch (err) {
+    const noAccess =
+      err instanceof GitHubError && (err.status === 403 || err.status === 404)
+    return {
+      plan: base,
+      activePr: null,
+      tabs: [defaultTab()],
+      branchActivityStatus: noAccess ? 'no-access' : 'ok',
+    }
+  }
+
+  const candidates = (
+    await Promise.all(
+      pulls.map(async (pr): Promise<PlanBranchCandidate | null> => {
+        try {
+          const headTree = await listPlanTree(
+            token,
+            repo.owner,
+            repo.name,
+            pr.headSha,
+          )
+          const entry = headTree.entries.find(
+            (e) => parsePlanPath(e.path)?.slug === info.slug,
+          )
+          if (!entry) return null // added-only or removed on this branch
+          const headInfo = parsePlanPath(entry.path)
+          if (!headInfo) return null
+          if (headInfo.state !== base.state)
+            return { pr, headPath: entry.path, changeKind: 'moved' }
+          if (entry.sha !== base.bodySha)
+            return { pr, headPath: entry.path, changeKind: 'modified' }
+          return null // identical on this branch
+        } catch {
+          return null
+        }
+      }),
+    )
+  )
+    .filter((c): c is PlanBranchCandidate => c !== null)
+    .sort((a, b) => b.pr.updatedAt.localeCompare(a.pr.updatedAt))
+
+  const tabs: PlanBranchTab[] = [
+    defaultTab(),
+    ...candidates.map(
+      (c): PlanBranchTab => ({
+        kind: 'pr',
+        number: c.pr.number,
+        title: c.pr.title,
+        url: c.pr.url,
+        draft: c.pr.draft,
+        changeKind: c.changeKind,
+      }),
+    ),
+  ]
+
+  const active =
+    prNumber != null
+      ? candidates.find((c) => c.pr.number === prNumber)
+      : undefined
+
+  // No PR requested, or a stale ?pr that no longer changes this plan → default.
+  if (!active) {
+    return { plan: base, activePr: null, tabs, branchActivityStatus: 'ok' }
+  }
+
+  const file = await fetchContentFile(
+    token,
+    repo.owner,
+    repo.name,
+    active.headPath,
+    active.pr.headSha,
+  )
+  if (!file) {
+    return { plan: base, activePr: null, tabs, branchActivityStatus: 'ok' }
+  }
+  const parsed = parseFrontmatter(file.text)
+  const headInfo = parsePlanPath(active.headPath)
+  const plan: PlanDetail = {
+    path: active.headPath,
+    state: headInfo?.state ?? base.state,
+    slug: info.slug,
+    title: parsed.data.title ?? base.title,
+    status: parsed.data.status ?? null,
+    created: parsed.data.created ?? null,
+    updated: parsed.data.updated ?? null,
+    bodySha: file.sha,
+    body: parsed.content,
+  }
+  return { plan, activePr: active.pr.number, tabs, branchActivityStatus: 'ok' }
 }
