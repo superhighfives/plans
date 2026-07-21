@@ -627,6 +627,105 @@ form {
   margin: 0 0 20px;
 }
 
+/* Plan body: diff / rendered toggle + unified diff */
+.plan-body__bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 14px;
+}
+.diffstat {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 13px;
+  font-weight: 600;
+}
+.diffstat__add {
+  color: var(--state-done);
+}
+.diffstat__del {
+  color: #e5484d;
+}
+.segmented {
+  display: inline-flex;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+  background: var(--panel);
+}
+.segmented__btn {
+  padding: 5px 14px;
+  font-size: 13px;
+  font-weight: 550;
+  background: transparent;
+  color: var(--muted);
+  border: none;
+  cursor: pointer;
+}
+.segmented__btn + .segmented__btn {
+  border-left: 1px solid var(--border);
+}
+.segmented__btn--active {
+  background: var(--accent);
+  color: var(--accent-contrast);
+}
+
+.diff {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 12.5px;
+  line-height: 1.5;
+}
+.diff__hunk {
+  width: 100%;
+  border-collapse: collapse;
+}
+.diff__hunk + .diff__hunk {
+  border-top: 1px solid var(--border);
+}
+.diff__row--hunk .diff__code {
+  color: var(--muted);
+  background: var(--panel-2);
+}
+.diff__gutter {
+  width: 1%;
+  white-space: nowrap;
+  padding: 0 8px;
+  text-align: right;
+  color: var(--muted);
+  background: var(--panel-2);
+  border-right: 1px solid var(--border);
+  user-select: none;
+  vertical-align: top;
+}
+.diff__code {
+  padding: 0 10px;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  color: var(--text);
+  vertical-align: top;
+}
+.diff__sign {
+  display: inline-block;
+  width: 1ch;
+  margin-right: 6px;
+  color: var(--muted);
+}
+.diff__row--add .diff__code {
+  background: color-mix(in srgb, var(--state-done) 14%, transparent);
+}
+.diff__row--add .diff__sign {
+  color: var(--state-done);
+}
+.diff__row--del .diff__code {
+  background: color-mix(in srgb, #e5484d 14%, transparent);
+}
+.diff__row--del .diff__sign {
+  color: #e5484d;
+}
+
 .tag--state {
   color: var(--accent-contrast);
   border: none;

@@ -1,7 +1,9 @@
 import { createFileRoute, Link } from '@tanstack/react-router'
+import { useState } from 'react'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import { PLAN_STATE_LABELS } from '~/lib/plans/states'
+import type { UnifiedDiff } from '~/lib/plans/text-diff'
 import type { PlanBranchTab, PlanView } from '~/lib/plans/types'
 import { getPlanView } from '~/server/repo.functions'
 
@@ -31,8 +33,9 @@ export const Route = createFileRoute('/repos/$owner/$repo/plan/$')({
 })
 
 function PlanPage() {
-  const { plan, tabs, activePr } = Route.useLoaderData()
+  const { plan, tabs, activePr, diff } = Route.useLoaderData()
   const { owner, repo, _splat } = Route.useParams()
+  const hasDiff = diff != null && diff.hunks.length > 0
 
   return (
     <section className="plan">
@@ -96,10 +99,109 @@ function PlanPage() {
         <ViewingBranchNotice tabs={tabs} activePr={activePr} />
       ) : null}
 
-      <article className="markdown">
-        <ReactMarkdown remarkPlugins={[remarkGfm]}>{plan.body}</ReactMarkdown>
-      </article>
+      {activePr != null && hasDiff && diff ? (
+        <PlanBody body={plan.body} diff={diff} />
+      ) : (
+        <>
+          {activePr != null && diff && !hasDiff ? (
+            <p className="branch-notice">
+              No changes to the plan body on this branch — the difference is the
+              state/status move shown above.
+            </p>
+          ) : null}
+          <article className="markdown">
+            <ReactMarkdown remarkPlugins={[remarkGfm]}>
+              {plan.body}
+            </ReactMarkdown>
+          </article>
+        </>
+      )}
     </section>
+  )
+}
+
+function PlanBody({ body, diff }: { body: string; diff: UnifiedDiff }) {
+  const [mode, setMode] = useState<'diff' | 'rendered'>('diff')
+  return (
+    <div className="plan-body">
+      <div className="plan-body__bar">
+        <div className="diffstat">
+          <span className="diffstat__add">+{diff.additions}</span>{' '}
+          <span className="diffstat__del">−{diff.deletions}</span>
+        </div>
+        <div className="segmented" role="tablist">
+          <button
+            type="button"
+            role="tab"
+            aria-selected={mode === 'diff'}
+            className={`segmented__btn${mode === 'diff' ? ' segmented__btn--active' : ''}`}
+            onClick={() => setMode('diff')}
+          >
+            Diff
+          </button>
+          <button
+            type="button"
+            role="tab"
+            aria-selected={mode === 'rendered'}
+            className={`segmented__btn${mode === 'rendered' ? ' segmented__btn--active' : ''}`}
+            onClick={() => setMode('rendered')}
+          >
+            Rendered
+          </button>
+        </div>
+      </div>
+
+      {mode === 'diff' ? (
+        <DiffView diff={diff} />
+      ) : (
+        <article className="markdown">
+          <ReactMarkdown remarkPlugins={[remarkGfm]}>{body}</ReactMarkdown>
+        </article>
+      )}
+    </div>
+  )
+}
+
+function DiffView({ diff }: { diff: UnifiedDiff }) {
+  return (
+    <div className="diff">
+      {diff.hunks.map((hunk) => (
+        <table
+          className="diff__hunk"
+          key={`${hunk.baseStart}:${hunk.headStart}`}
+        >
+          <tbody>
+            <tr className="diff__row diff__row--hunk">
+              <td className="diff__gutter" />
+              <td className="diff__gutter" />
+              <td className="diff__code">
+                @@ -{hunk.baseStart},{hunk.baseLines} +{hunk.headStart},
+                {hunk.headLines} @@
+              </td>
+            </tr>
+            {hunk.lines.map((line) => (
+              <tr
+                className={`diff__row diff__row--${line.type}`}
+                key={`${line.type}:${line.baseNo ?? 'x'}:${line.headNo ?? 'x'}`}
+              >
+                <td className="diff__gutter">{line.baseNo ?? ''}</td>
+                <td className="diff__gutter">{line.headNo ?? ''}</td>
+                <td className="diff__code">
+                  <span className="diff__sign">
+                    {line.type === 'add'
+                      ? '+'
+                      : line.type === 'del'
+                        ? '−'
+                        : ' '}
+                  </span>
+                  {line.text || ' '}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      ))}
+    </div>
   )
 }
 

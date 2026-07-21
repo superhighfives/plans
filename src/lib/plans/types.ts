@@ -1,5 +1,6 @@
 import type { PlanChange } from './diff'
 import type { PlanState } from './states'
+import type { UnifiedDiff } from './text-diff'
 
 /** Client-safe shapes returned by the plan server functions. */
 
@@ -43,6 +44,12 @@ export interface PlanView {
   activePr: number | null
   /** The default branch tab plus one per open PR that changes this plan. */
   tabs: PlanBranchTab[]
+  /**
+   * Unified diff of the plan body, default branch → active PR. Null on the
+   * default tab; present (possibly with zero hunks, e.g. a pure state move) when
+   * a PR is active.
+   */
+  diff: UnifiedDiff | null
   /** 'no-access' when the App lacks pull_requests:read (tabs limited to main). */
   branchActivityStatus: BranchActivityStatus
 }

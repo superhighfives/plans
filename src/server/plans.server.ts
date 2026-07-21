@@ -19,6 +19,7 @@ import {
   parseFrontmatter,
 } from '~/lib/plans/frontmatter'
 import { PLAN_STATES, type PlanState, parsePlanPath } from '~/lib/plans/states'
+import { unifiedDiff } from '~/lib/plans/text-diff'
 import type {
   BranchActivityStatus,
   PlanBranchTab,
@@ -450,6 +451,7 @@ export async function loadPlanView(
       plan: base,
       activePr: null,
       tabs: [defaultTab()],
+      diff: null,
       branchActivityStatus: noAccess ? 'no-access' : 'ok',
     }
   }
@@ -505,7 +507,13 @@ export async function loadPlanView(
 
   // No PR requested, or a stale ?pr that no longer changes this plan → default.
   if (!active) {
-    return { plan: base, activePr: null, tabs, branchActivityStatus: 'ok' }
+    return {
+      plan: base,
+      activePr: null,
+      tabs,
+      diff: null,
+      branchActivityStatus: 'ok',
+    }
   }
 
   const file = await fetchContentFile(
@@ -516,7 +524,13 @@ export async function loadPlanView(
     active.pr.headSha,
   )
   if (!file) {
-    return { plan: base, activePr: null, tabs, branchActivityStatus: 'ok' }
+    return {
+      plan: base,
+      activePr: null,
+      tabs,
+      diff: null,
+      branchActivityStatus: 'ok',
+    }
   }
   const parsed = parseFrontmatter(file.text)
   const headInfo = parsePlanPath(active.headPath)
@@ -531,5 +545,13 @@ export async function loadPlanView(
     bodySha: file.sha,
     body: parsed.content,
   }
-  return { plan, activePr: active.pr.number, tabs, branchActivityStatus: 'ok' }
+  // Diff the body default → branch so the detail view can show what changed.
+  const diff = unifiedDiff(base.body, plan.body)
+  return {
+    plan,
+    activePr: active.pr.number,
+    tabs,
+    diff,
+    branchActivityStatus: 'ok',
+  }
 }
