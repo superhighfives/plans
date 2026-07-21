@@ -24,8 +24,16 @@ export const Route = createFileRoute('/api/auth/github/callback')({
         const state = url.searchParams.get('state')
 
         // Verify the state cookie matches the returned state (CSRF defense).
-        const expectedState = await readOAuthState(env, request.headers.get('cookie'))
-        if (!code || !state || !expectedState || !timingSafeEqual(state, expectedState)) {
+        const expectedState = await readOAuthState(
+          env,
+          request.headers.get('cookie'),
+        )
+        if (
+          !code ||
+          !state ||
+          !expectedState ||
+          !timingSafeEqual(state, expectedState)
+        ) {
           return redirectHome('/?error=oauth_state', env, /* clearState */ true)
         }
 
@@ -37,7 +45,11 @@ export const Route = createFileRoute('/api/auth/github/callback')({
           ])
 
           const db = getDb()
-          const user = await upsertUserAndInstallations(db, ghUser, ghInstallations)
+          const user = await upsertUserAndInstallations(
+            db,
+            ghUser,
+            ghInstallations,
+          )
 
           const headers = new Headers({ Location: '/' })
           headers.append(
@@ -62,7 +74,11 @@ export const Route = createFileRoute('/api/auth/github/callback')({
   },
 })
 
-function redirectHome(location: string, env: ReturnType<typeof getEnv>, clearState: boolean): Response {
+function redirectHome(
+  location: string,
+  env: ReturnType<typeof getEnv>,
+  clearState: boolean,
+): Response {
   const headers = new Headers({ Location: location })
   if (clearState) headers.append('Set-Cookie', buildOAuthStateClearCookie(env))
   return new Response(null, { status: 302, headers })

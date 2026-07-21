@@ -65,7 +65,9 @@ async function unsign<T>(secret: string, value: string): Promise<T | null> {
 
 // --- cookie parsing -------------------------------------------------------
 
-export function parseCookies(header: string | null | undefined): Record<string, string> {
+export function parseCookies(
+  header: string | null | undefined,
+): Record<string, string> {
   const out: Record<string, string> = {}
   if (!header) return out
   for (const part of header.split(/;\s*/)) {
@@ -78,7 +80,10 @@ export function parseCookies(header: string | null | undefined): Record<string, 
 
 // --- session --------------------------------------------------------------
 
-export async function buildSessionSetCookie(env: AppEnv, session: SessionData): Promise<string> {
+export async function buildSessionSetCookie(
+  env: AppEnv,
+  session: SessionData,
+): Promise<string> {
   const value = await sign(env.SESSION_SECRET, session)
   return `${sessionCookieName(env)}=${value}; ${cookieAttrs(env, SESSION_MAX_AGE_SEC)}`
 }
@@ -95,14 +100,21 @@ export async function readSession(
   if (!raw) return null
   const data = await unsign<SessionData>(env.SESSION_SECRET, raw)
   if (!data) return null
-  if (data.iat + SESSION_MAX_AGE_SEC < Math.floor(Date.now() / 1000)) return null
+  if (data.iat + SESSION_MAX_AGE_SEC < Math.floor(Date.now() / 1000))
+    return null
   return data
 }
 
 // --- oauth state ----------------------------------------------------------
 
-export async function buildOAuthStateSetCookie(env: AppEnv, state: string): Promise<string> {
-  const value = await sign(env.SESSION_SECRET, { state, iat: Math.floor(Date.now() / 1000) })
+export async function buildOAuthStateSetCookie(
+  env: AppEnv,
+  state: string,
+): Promise<string> {
+  const value = await sign(env.SESSION_SECRET, {
+    state,
+    iat: Math.floor(Date.now() / 1000),
+  })
   return `${oauthCookieName(env)}=${value}; ${cookieAttrs(env, OAUTH_STATE_MAX_AGE_SEC)}`
 }
 
@@ -116,8 +128,12 @@ export async function readOAuthState(
 ): Promise<string | null> {
   const raw = parseCookies(cookieHeader)[oauthCookieName(env)]
   if (!raw) return null
-  const data = await unsign<{ state: string; iat: number }>(env.SESSION_SECRET, raw)
+  const data = await unsign<{ state: string; iat: number }>(
+    env.SESSION_SECRET,
+    raw,
+  )
   if (!data) return null
-  if (data.iat + OAUTH_STATE_MAX_AGE_SEC < Math.floor(Date.now() / 1000)) return null
+  if (data.iat + OAUTH_STATE_MAX_AGE_SEC < Math.floor(Date.now() / 1000))
+    return null
   return data.state
 }

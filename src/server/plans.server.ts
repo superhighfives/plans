@@ -1,14 +1,26 @@
 import { and, eq, inArray } from 'drizzle-orm'
 import type { Db } from '~/db'
-import { installations, planCache, repos } from '~/db/schema'
 import type { Installation, PlanCacheRow, Repo } from '~/db/schema'
+import { installations, planCache, repos } from '~/db/schema'
 import type { AppEnv } from '~/env'
 import { newId } from '~/lib/crypto'
 import { getInstallationToken } from '~/lib/github/app'
-import { fetchBlobText, fetchContentFile, listPlanTree } from '~/lib/github/plans'
-import { isValidPlanFrontmatter, parseFrontmatter } from '~/lib/plans/frontmatter'
-import { parsePlanPath, PLAN_STATES, type PlanState } from '~/lib/plans/states'
-import type { PlanDetail, PlanSummary, RepoPlans, RepoRef } from '~/lib/plans/types'
+import {
+  fetchBlobText,
+  fetchContentFile,
+  listPlanTree,
+} from '~/lib/github/plans'
+import {
+  isValidPlanFrontmatter,
+  parseFrontmatter,
+} from '~/lib/plans/frontmatter'
+import { PLAN_STATES, type PlanState, parsePlanPath } from '~/lib/plans/states'
+import type {
+  PlanDetail,
+  PlanSummary,
+  RepoPlans,
+  RepoRef,
+} from '~/lib/plans/types'
 import { getUserInstallationIds } from './users.server'
 
 export interface RepoContext {
@@ -90,7 +102,12 @@ export async function loadRepoPlans(
 ): Promise<RepoPlans> {
   const { repo, installation } = ctx
   const token = await getInstallationToken(db, env, installation)
-  const tree = await listPlanTree(token, repo.owner, repo.name, repo.defaultBranch)
+  const tree = await listPlanTree(
+    token,
+    repo.owner,
+    repo.name,
+    repo.defaultBranch,
+  )
 
   const existing = await db
     .select()
@@ -160,7 +177,9 @@ export async function loadRepoPlans(
   }
 
   // Evict cache rows for plans that no longer exist.
-  const stalePaths = existing.filter((r) => !seenPaths.has(r.path)).map((r) => r.id)
+  const stalePaths = existing
+    .filter((r) => !seenPaths.has(r.path))
+    .map((r) => r.id)
   if (stalePaths.length > 0) {
     await db.delete(planCache).where(inArray(planCache.id, stalePaths))
   }
@@ -168,7 +187,12 @@ export async function loadRepoPlans(
   // Record the tree sha we cached against.
   await db
     .update(repos)
-    .set({ lastScannedSha: tree.treeSha, lastScannedAt: nowMs, hasPlans: summaries.length > 0, updatedAt: nowMs })
+    .set({
+      lastScannedSha: tree.treeSha,
+      lastScannedAt: nowMs,
+      hasPlans: summaries.length > 0,
+      updatedAt: nowMs,
+    })
     .where(eq(repos.id, repo.id))
 
   const states = emptyStates()
@@ -212,7 +236,13 @@ export async function loadPlanDetail(
   }
 
   const token = await getInstallationToken(db, env, installation)
-  const file = await fetchContentFile(token, repo.owner, repo.name, path, repo.defaultBranch)
+  const file = await fetchContentFile(
+    token,
+    repo.owner,
+    repo.name,
+    path,
+    repo.defaultBranch,
+  )
   if (!file) return null
 
   const parsed = parseFrontmatter(file.text)

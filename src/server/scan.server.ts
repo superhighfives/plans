@@ -1,13 +1,13 @@
-import { and, eq, inArray, notInArray } from 'drizzle-orm'
+import { and, eq, inArray } from 'drizzle-orm'
 import type { Db } from '~/db'
-import { installations as installationsTable, repos } from '~/db/schema'
 import type { Installation } from '~/db/schema'
+import { installations as installationsTable, repos } from '~/db/schema'
 import type { AppEnv } from '~/env'
 import { newId } from '~/lib/crypto'
 import {
   getInstallationToken,
-  listInstallationRepos,
   type InstallationRepo,
+  listInstallationRepos,
 } from '~/lib/github/app'
 import { listPlanTree } from '~/lib/github/plans'
 import { getUserInstallationIds } from './users.server'
@@ -21,15 +21,22 @@ import { getUserInstallationIds } from './users.server'
  * moving fan-out onto Cloudflare Queues; the logic is factored so `scanRepo`
  * can be lifted into a queue consumer without change. See README "Deviations".
  */
-async function mapLimit<T, R>(items: T[], limit: number, fn: (item: T) => Promise<R>): Promise<R[]> {
+async function mapLimit<T, R>(
+  items: T[],
+  limit: number,
+  fn: (item: T) => Promise<R>,
+): Promise<R[]> {
   const results: R[] = new Array(items.length)
   let cursor = 0
-  const workers = Array.from({ length: Math.min(limit, items.length) }, async () => {
-    while (cursor < items.length) {
-      const index = cursor++
-      results[index] = await fn(items[index]!)
-    }
-  })
+  const workers = Array.from(
+    { length: Math.min(limit, items.length) },
+    async () => {
+      while (cursor < items.length) {
+        const index = cursor++
+        results[index] = await fn(items[index]!)
+      }
+    },
+  )
   await Promise.all(workers)
   return results
 }
@@ -39,7 +46,12 @@ async function scanRepo(
   ghRepo: InstallationRepo,
 ): Promise<{ hasPlans: boolean; treeSha: string | null }> {
   try {
-    const tree = await listPlanTree(token, ghRepo.owner.login, ghRepo.name, ghRepo.default_branch)
+    const tree = await listPlanTree(
+      token,
+      ghRepo.owner.login,
+      ghRepo.name,
+      ghRepo.default_branch,
+    )
     return { hasPlans: tree.entries.length > 0, treeSha: tree.treeSha }
   } catch {
     // Empty repo, missing branch, permissions, etc. — treat as "no plans".
@@ -100,17 +112,31 @@ export async function scanInstallation(
       })
   }
 
-  // Drop repos the installation can no longer see.
-  const seenIds = ghRepos.map((r) => r.id)
-  if (seenIds.length > 0) {
-    await db
-      .delete(repos)
-      .where(
-        and(
-          eq(repos.installationId, installation.id),
-          notInArray(repos.githubRepoId, seenIds),
-        ),
-      )
+  // Drop repos the installation can no longer see. D1 caps bound parameters at
+  // 100 per query, so we diff in memory and delete only the stale IDs (usually
+  // none) rather than sending every seen ID in a NOT IN clause.
+  const seen = new Set(ghRepos.map((r) => r.id))
+  if (seen.size > 0) {
+    const existing = await db
+      .select({ githubRepoId: repos.githubRepoId })
+      .from(repos)
+      .where(eq(repos.installationId, installation.id))
+
+    const stale = existing
+      .map((r) => r.githubRepoId)
+      .filter((id) => !seen.has(id))
+
+    for (let i = 0; i < stale.length; i += 100) {
+      const chunk = stale.slice(i, i + 100)
+      await db
+        .delete(repos)
+        .where(
+          and(
+            eq(repos.installationId, installation.id),
+            inArray(repos.githubRepoId, chunk),
+          ),
+        )
+    }
   } else {
     await db.delete(repos).where(eq(repos.installationId, installation.id))
   }

@@ -1,15 +1,18 @@
-import { useState } from 'react'
 import { createFileRoute, Link, useRouter } from '@tanstack/react-router'
 import { useServerFn } from '@tanstack/react-start'
+import { useState } from 'react'
 import { getCurrentUser } from '~/server/auth.functions'
 import {
+  type Dashboard,
   getDashboard,
   refreshDashboard,
-  type Dashboard,
 } from '~/server/dashboard.functions'
 
 export const Route = createFileRoute('/')({
-  loader: async (): Promise<{ authed: boolean; dashboard: Dashboard | null }> => {
+  loader: async (): Promise<{
+    authed: boolean
+    dashboard: Dashboard | null
+  }> => {
     const user = await getCurrentUser()
     if (!user) return { authed: false, dashboard: null }
     return { authed: true, dashboard: await getDashboard() }
@@ -28,16 +31,16 @@ function Landing() {
     <section className="hero">
       <h1>Your plans, everywhere.</h1>
       <p className="hero__lead">
-        Plans reads the <code>plans/</code> directories across your GitHub
-        repos and lets you browse them by state — backlog, ready, in progress,
-        and done — all in one place.
+        Plans reads the <code>plans/</code> directories across your GitHub repos
+        and lets you browse them by state — backlog, ready, in progress, and
+        done — all in one place.
       </p>
       <a className="btn btn--lg" href="/api/auth/github/login">
         Sign in with GitHub
       </a>
       <p className="hero__hint">
-        You’ll install the GitHub App on the repos you want to browse. It requests
-        read access to repository contents and nothing more.
+        You’ll install the GitHub App on the repos you want to browse. It
+        requests read access to repository contents and nothing more.
       </p>
     </section>
   )
@@ -64,11 +67,19 @@ function DashboardView({ dashboard }: { dashboard: Dashboard }) {
         <div>
           <h1>Dashboard</h1>
           <p className="muted">
-            {dashboard.reposWithPlans} repo{dashboard.reposWithPlans === 1 ? '' : 's'} with plans
-            {dashboard.lastScannedAt ? ` · scanned ${formatWhen(dashboard.lastScannedAt)}` : ''}
+            {dashboard.reposWithPlans} repo
+            {dashboard.reposWithPlans === 1 ? '' : 's'} with plans
+            {dashboard.lastScannedAt
+              ? ` · scanned ${formatWhen(dashboard.lastScannedAt)}`
+              : ''}
           </p>
         </div>
-        <button className="btn btn--ghost" onClick={onRefresh} disabled={busy}>
+        <button
+          type="button"
+          className="btn btn--ghost"
+          onClick={onRefresh}
+          disabled={busy}
+        >
           {busy ? 'Scanning…' : 'Rescan repos'}
         </button>
       </div>
@@ -77,8 +88,8 @@ function DashboardView({ dashboard }: { dashboard: Dashboard }) {
         <div className="empty">
           <h2>No installations yet</h2>
           <p>
-            Install the Plans GitHub App on your account or an org, then
-            rescan. Only repos with a top-level <code>plans/</code> folder show up.
+            Install the Plans GitHub App on your account or an org, then rescan.
+            Only repos with a top-level <code>plans/</code> folder show up.
           </p>
         </div>
       ) : (
@@ -86,11 +97,19 @@ function DashboardView({ dashboard }: { dashboard: Dashboard }) {
           <div className="installation" key={inst.id}>
             <div className="installation__head">
               {inst.accountAvatarUrl ? (
-                <img className="avatar" src={inst.accountAvatarUrl} alt="" width={24} height={24} />
+                <img
+                  className="avatar"
+                  src={inst.accountAvatarUrl}
+                  alt=""
+                  width={24}
+                  height={24}
+                />
               ) : null}
               <h2>{inst.accountLogin}</h2>
               <span className="tag">{inst.accountType}</span>
-              {inst.suspended ? <span className="tag tag--warn">Suspended</span> : null}
+              {inst.suspended ? (
+                <span className="tag tag--warn">Suspended</span>
+              ) : null}
             </div>
             {inst.repos.length === 0 ? (
               <p className="muted installation__empty">
@@ -106,7 +125,9 @@ function DashboardView({ dashboard }: { dashboard: Dashboard }) {
                       className="repo-list__item"
                     >
                       <span className="repo-list__name">{repo.fullName}</span>
-                      {repo.isPrivate ? <span className="tag">Private</span> : null}
+                      {repo.isPrivate ? (
+                        <span className="tag">Private</span>
+                      ) : null}
                     </Link>
                   </li>
                 ))}

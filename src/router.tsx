@@ -14,7 +14,9 @@ function NotFound() {
   return (
     <div className="empty">
       <h2>Not found</h2>
-      <p>That page, repo, or plan doesn’t exist — or you don’t have access to it.</p>
+      <p>
+        That page, repo, or plan doesn’t exist — or you don’t have access to it.
+      </p>
       <a href="/">Back to dashboard</a>
     </div>
   )

@@ -1,7 +1,7 @@
-import { useState } from 'react'
 import { createFileRoute, Link, useRouter } from '@tanstack/react-router'
 import { useServerFn } from '@tanstack/react-start'
-import { PLAN_STATES, PLAN_STATE_LABELS } from '~/lib/plans/states'
+import { useState } from 'react'
+import { PLAN_STATE_LABELS, PLAN_STATES } from '~/lib/plans/states'
 import type { PlanSummary, RepoPlans } from '~/lib/plans/types'
 import { getRepoPlans, refreshRepoPlans } from '~/server/repo.functions'
 
@@ -46,15 +46,20 @@ function RepoPage() {
             {data.repo.isPrivate ? ' · private' : ''}
           </p>
         </div>
-        <button className="btn btn--ghost" onClick={onRefresh} disabled={busy}>
+        <button
+          type="button"
+          className="btn btn--ghost"
+          onClick={onRefresh}
+          disabled={busy}
+        >
           {busy ? 'Refreshing…' : 'Refresh'}
         </button>
       </div>
 
       {data.truncated ? (
         <p className="notice">
-          This repo’s file tree is very large and GitHub truncated it — some plans
-          may be missing.
+          This repo’s file tree is very large and GitHub truncated it — some
+          plans may be missing.
         </p>
       ) : null}
 

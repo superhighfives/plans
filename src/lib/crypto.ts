@@ -22,7 +22,10 @@ export function fromBase64(b64: string): Uint8Array<ArrayBuffer> {
 }
 
 export function toBase64Url(bytes: Uint8Array): string {
-  return toBase64(bytes).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '')
+  return toBase64(bytes)
+    .replace(/\+/g, '-')
+    .replace(/\//g, '_')
+    .replace(/=+$/, '')
 }
 
 export function fromBase64Url(b64url: string): Uint8Array<ArrayBuffer> {
@@ -57,8 +60,15 @@ async function hmacKey(secret: string): Promise<CryptoKey> {
   )
 }
 
-export async function hmacSign(secret: string, message: string): Promise<string> {
-  const sig = await crypto.subtle.sign('HMAC', await hmacKey(secret), encoder.encode(message))
+export async function hmacSign(
+  secret: string,
+  message: string,
+): Promise<string> {
+  const sig = await crypto.subtle.sign(
+    'HMAC',
+    await hmacKey(secret),
+    encoder.encode(message),
+  )
   return toBase64Url(new Uint8Array(sig))
 }
 
@@ -69,8 +79,15 @@ function toHex(bytes: Uint8Array): string {
 }
 
 /** HMAC-SHA256 as a lowercase hex string (GitHub webhook signature format). */
-export async function hmacHex(secret: string, message: string): Promise<string> {
-  const sig = await crypto.subtle.sign('HMAC', await hmacKey(secret), encoder.encode(message))
+export async function hmacHex(
+  secret: string,
+  message: string,
+): Promise<string> {
+  const sig = await crypto.subtle.sign(
+    'HMAC',
+    await hmacKey(secret),
+    encoder.encode(message),
+  )
   return toHex(new Uint8Array(sig))
 }
 
@@ -103,20 +120,35 @@ export async function hmacVerify(
 async function aesKey(base64Key: string): Promise<CryptoKey> {
   const raw = fromBase64(base64Key)
   if (raw.length !== 32) {
-    throw new Error('TOKEN_ENCRYPTION_KEY must decode to exactly 32 bytes (base64 of 32 random bytes).')
+    throw new Error(
+      'TOKEN_ENCRYPTION_KEY must decode to exactly 32 bytes (base64 of 32 random bytes).',
+    )
   }
-  return crypto.subtle.importKey('raw', raw, { name: 'AES-GCM' }, false, ['encrypt', 'decrypt'])
+  return crypto.subtle.importKey('raw', raw, { name: 'AES-GCM' }, false, [
+    'encrypt',
+    'decrypt',
+  ])
 }
 
 /** Encrypt plaintext; returns `base64(iv).base64(ciphertext)`. */
-export async function encryptSecret(base64Key: string, plaintext: string): Promise<string> {
+export async function encryptSecret(
+  base64Key: string,
+  plaintext: string,
+): Promise<string> {
   const key = await aesKey(base64Key)
   const iv = crypto.getRandomValues(new Uint8Array(12))
-  const ct = await crypto.subtle.encrypt({ name: 'AES-GCM', iv }, key, encoder.encode(plaintext))
+  const ct = await crypto.subtle.encrypt(
+    { name: 'AES-GCM', iv },
+    key,
+    encoder.encode(plaintext),
+  )
   return `${toBase64(iv)}.${toBase64(new Uint8Array(ct))}`
 }
 
-export async function decryptSecret(base64Key: string, payload: string): Promise<string> {
+export async function decryptSecret(
+  base64Key: string,
+  payload: string,
+): Promise<string> {
   const [ivPart, ctPart] = payload.split('.')
   if (!ivPart || !ctPart) throw new Error('Malformed encrypted payload')
   const key = await aesKey(base64Key)

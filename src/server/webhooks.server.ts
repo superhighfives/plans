@@ -1,4 +1,4 @@
-import { and, eq } from 'drizzle-orm'
+import { eq } from 'drizzle-orm'
 import type { Db } from '~/db'
 import { installations, planCache, repos } from '~/db/schema'
 import type { AppEnv } from '~/env'
@@ -10,7 +10,11 @@ import { listPlanTree } from '~/lib/github/plans'
  * evict its cached bodies so the next view refetches. Best-effort: if the repo
  * or installation isn't known yet, we no-op (a future dashboard scan finds it).
  */
-export async function handlePush(db: Db, env: AppEnv, payload: any): Promise<void> {
+export async function handlePush(
+  db: Db,
+  env: AppEnv,
+  payload: any,
+): Promise<void> {
   const repoId: number | undefined = payload?.repository?.id
   const defaultBranch: string | undefined = payload?.repository?.default_branch
   const ref: string | undefined = payload?.ref
@@ -18,7 +22,9 @@ export async function handlePush(db: Db, env: AppEnv, payload: any): Promise<voi
   if (!repoId || !defaultBranch || !ref || !installationId) return
   if (ref !== `refs/heads/${defaultBranch}`) return
 
-  const repo = await db.query.repos.findFirst({ where: eq(repos.githubRepoId, repoId) })
+  const repo = await db.query.repos.findFirst({
+    where: eq(repos.githubRepoId, repoId),
+  })
   if (!repo) return
   const installation = await db.query.installations.findFirst({
     where: eq(installations.githubInstallationId, installationId),
@@ -27,7 +33,12 @@ export async function handlePush(db: Db, env: AppEnv, payload: any): Promise<voi
 
   try {
     const token = await getInstallationToken(db, env, installation)
-    const tree = await listPlanTree(token, repo.owner, repo.name, repo.defaultBranch)
+    const tree = await listPlanTree(
+      token,
+      repo.owner,
+      repo.name,
+      repo.defaultBranch,
+    )
     await db
       .update(repos)
       .set({
