@@ -4,6 +4,7 @@ import {
   Link,
   Outlet,
   Scripts,
+  useRouterState,
 } from '@tanstack/react-router'
 import type { ReactNode } from 'react'
 import { type CurrentUser, getCurrentUser } from '~/server/auth.functions'
@@ -30,11 +31,26 @@ function RootComponent() {
   const user = Route.useLoaderData()
   return (
     <RootDocument>
+      <RouteProgress />
       <Header user={user} />
       <main className="container">
         <Outlet />
       </main>
     </RootDocument>
+  )
+}
+
+function RouteProgress() {
+  const isPending = useRouterState({
+    select: (s) => s.status === 'pending',
+  })
+  return (
+    <div
+      className={`route-progress${isPending ? ' route-progress--active' : ''}`}
+      role="progressbar"
+      aria-hidden={!isPending}
+      aria-label="Loading page"
+    />
   )
 }
 
