@@ -1,10 +1,14 @@
 # Plans
 
 A multi-tenant web app on Cloudflare that reads the `plans/` directories across
-your GitHub repos (the ones that use the [`planning`](plans/ready/planning-cms.md)
+your GitHub repos (the ones that use the [`planning`](skills/planning/SKILL.md)
 skill) and lets you browse them by state — **backlog, ready, in-progress, done** —
 in one place. GitHub is the source of truth; the app only ever reads and (in
 later phases) writes plans through the GitHub API.
+
+The `planning` skill lives in this repo too — it's the spec this app reads, so
+the two share one source of truth for the lifecycle. See
+[The `planning` skill](#the-planning-skill) below.
 
 This repo currently implements **Phase 0 (foundations)** and **Phase 1 (the
 read-only reader)**. Editing, AI moves, and Flue chat are later phases — see the
@@ -25,6 +29,29 @@ read-only reader)**. Editing, AI moves, and Flue chat are later phases — see t
 
 Only top-level `plans/<state>/*.md` files with valid frontmatter (a non-empty
 `title`) are recognized; anything else is silently skipped ("detect and skip").
+
+## The `planning` skill
+
+[`skills/planning/SKILL.md`](skills/planning/SKILL.md) is the agent skill that
+*writes* the `plans/` structure this app *reads* — the four states, the naming
+convention, the frontmatter schema, and the `/planning` slash-command modes. It
+lives here (rather than in a general skills collection) because the skill and the
+app are two halves of one contract: change the lifecycle in one and you change it
+in the other.
+
+To keep that from drifting, the contract has a single source of truth in code —
+[`src/lib/plans/states.ts`](src/lib/plans/states.ts) (`PLAN_STATE_DEFS`), from
+which the state ids, UI labels, frontmatter `status` values, and the
+`plans/<state>/*.md` path matcher are all derived. `states.skill.test.ts` reads
+`SKILL.md` and fails if its documented lifecycle or status enum no longer matches
+`PLAN_STATE_DEFS`.
+
+Install the skill globally with the [`skills`](https://github.com/vercel-labs/skills)
+CLI:
+
+```sh
+npx skills add superhighfives/plans --skill planning -g
+```
 
 ## Stack
 
@@ -70,6 +97,8 @@ src/
     repos/$owner/$repo/  Repo view + plan view
     api/                 OAuth login/callback, logout, GitHub webhook (server routes)
 migrations/              D1 SQL migrations (drizzle-kit)
+skills/
+  planning/SKILL.md      The planning skill — the plans/ contract this app reads
 ```
 
 ## Setup
@@ -159,7 +188,7 @@ npm run deploy             # build + wrangler deploy
 | `npm run build` | Production build (also regenerates the route tree) |
 | `npm run deploy` | Build and deploy to Cloudflare (manual; CI deploys on push to `main`) |
 | `npm run typecheck` | `tsc --noEmit` |
-| `npm test` | Unit tests (frontmatter, plan paths, crypto) |
+| `npm test` | Unit tests (frontmatter, plan paths, skill sync, crypto) |
 | `npm run db:generate` | Generate a D1 migration from the schema |
 | `npm run db:migrate:local` / `:remote` | Apply migrations |
 
