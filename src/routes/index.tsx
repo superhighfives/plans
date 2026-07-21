@@ -50,6 +50,10 @@ function DashboardView({ dashboard }: { dashboard: Dashboard }) {
   const router = useRouter()
   const refresh = useServerFn(refreshDashboard)
   const [busy, setBusy] = useState(false)
+  // True while the loader re-runs on the already-rendered page (background
+  // revalidation after staleTime, or an explicit rescan).
+  const revalidating = Route.useMatch({ select: (m) => Boolean(m.isFetching) })
+  const scanning = busy || revalidating
 
   async function onRefresh() {
     setBusy(true)
@@ -78,9 +82,10 @@ function DashboardView({ dashboard }: { dashboard: Dashboard }) {
           type="button"
           className="btn btn--ghost"
           onClick={onRefresh}
-          disabled={busy}
+          disabled={scanning}
         >
-          {busy ? 'Scanning…' : 'Rescan repos'}
+          {scanning ? <span className="spinner" aria-hidden /> : null}
+          {scanning ? 'Scanning…' : 'Rescan repos'}
         </button>
       </div>
 

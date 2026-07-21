@@ -89,6 +89,20 @@ function emptyStates(): Record<PlanState, PlanSummary[]> {
   return { backlog: [], ready: [], 'in-progress': [], done: [] }
 }
 
+/** Parse a frontmatter date to a sortable epoch; unparseable/absent sorts last. */
+function completedMs(p: PlanSummary): number {
+  const raw = p.updated ?? p.created
+  if (!raw) return Number.NEGATIVE_INFINITY
+  const ms = Date.parse(raw)
+  return Number.isNaN(ms) ? Number.NEGATIVE_INFINITY : ms
+}
+
+/** Most-recently-completed first; ties (and undated plans) fall back to title. */
+function compareByCompletedDesc(a: PlanSummary, b: PlanSummary): number {
+  const diff = completedMs(b) - completedMs(a)
+  return diff !== 0 ? diff : a.title.localeCompare(b.title)
+}
+
 /**
  * Load a repo's plans, refreshing the D1 cache incrementally against the git
  * tree. Blobs whose sha is unchanged since the last load are reused from cache;
@@ -203,7 +217,14 @@ export async function loadRepoPlans(
   const states = emptyStates()
   for (const summary of summaries) states[summary.state].push(summary)
   for (const state of PLAN_STATES) {
-    states[state].sort((a, b) => a.title.localeCompare(b.title))
+    // Done reads as a history: most-recently-completed first (the `updated`
+    // frontmatter date is our best proxy for when it shipped). Everything else
+    // is browsed by name.
+    states[state].sort(
+      state === 'done'
+        ? (a, b) => compareByCompletedDesc(a, b)
+        : (a, b) => a.title.localeCompare(b.title),
+    )
   }
 
   return { repo: toRepoRef(repo), states, truncated: tree.truncated }

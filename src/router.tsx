@@ -5,6 +5,9 @@ export function getRouter() {
   return createRouter({
     routeTree,
     defaultPreload: 'intent',
+    // Serve cached loader data instantly on revisit; revalidate in the
+    // background (surfaced by the spinner on each page's refresh button).
+    defaultStaleTime: 60_000,
     scrollRestoration: true,
     defaultNotFoundComponent: NotFound,
   })

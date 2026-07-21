@@ -20,6 +20,10 @@ function RepoPage() {
   const router = useRouter()
   const refresh = useServerFn(refreshRepoPlans)
   const [busy, setBusy] = useState(false)
+  // True while the loader re-runs on an already-rendered page (background
+  // revalidation after staleTime, or an explicit refresh).
+  const revalidating = Route.useMatch({ select: (m) => Boolean(m.isFetching) })
+  const refreshing = busy || revalidating
 
   const total = PLAN_STATES.reduce((n, s) => n + data.states[s].length, 0)
 
@@ -50,9 +54,10 @@ function RepoPage() {
           type="button"
           className="btn btn--ghost"
           onClick={onRefresh}
-          disabled={busy}
+          disabled={refreshing}
         >
-          {busy ? 'Refreshing…' : 'Refresh'}
+          {refreshing ? <Spinner /> : null}
+          {refreshing ? 'Refreshing…' : 'Refresh'}
         </button>
       </div>
 
@@ -80,6 +85,8 @@ function RepoPage() {
               plans={data.states[state]}
               owner={owner}
               repo={repo}
+              // Done can be long and is history — collapse to the most recent.
+              initialLimit={state === 'done' ? 5 : undefined}
             />
           ))}
         </div>
@@ -93,12 +100,21 @@ function StateColumn({
   plans,
   owner,
   repo,
+  initialLimit,
 }: {
   label: string
   plans: PlanSummary[]
   owner: string
   repo: string
+  /** If set, show only this many plans until "Show more" is clicked. */
+  initialLimit?: number
 }) {
+  const [expanded, setExpanded] = useState(false)
+  const collapsible =
+    initialLimit != null && !expanded && plans.length > initialLimit
+  const visible = collapsible ? plans.slice(0, initialLimit) : plans
+  const hidden = plans.length - visible.length
+
   return (
     <div className="board__col">
       <div className="board__col-head">
@@ -109,7 +125,7 @@ function StateColumn({
         <p className="board__empty">Empty</p>
       ) : (
         <ul className="plan-list">
-          {plans.map((plan) => (
+          {visible.map((plan) => (
             <li key={plan.path}>
               <Link
                 to="/repos/$owner/$repo/plan/$"
@@ -125,6 +141,19 @@ function StateColumn({
           ))}
         </ul>
       )}
+      {hidden > 0 ? (
+        <button
+          type="button"
+          className="board__more"
+          onClick={() => setExpanded(true)}
+        >
+          Show {hidden} more
+        </button>
+      ) : null}
     </div>
   )
+}
+
+function Spinner() {
+  return <span className="spinner" aria-hidden />
 }
