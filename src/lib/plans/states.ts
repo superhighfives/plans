@@ -1,6 +1,6 @@
 /**
  * The canonical definition of the plan lifecycle — the single source of truth
- * shared with the `planning` skill (`skills/planning/SKILL.md`). Everything
+ * shared with the `plans` skill (`skills/plans/SKILL.md`). Everything
  * below (the ordered id list, UI labels, frontmatter `status` values, and the
  * path matcher) is derived from `PLAN_STATE_DEFS`; nothing else hardcodes a
  * state. `states.skill.test.ts` asserts the skill's prose agrees with this.

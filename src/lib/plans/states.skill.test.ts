@@ -1,17 +1,17 @@
 import { describe, expect, it } from 'vitest'
 // Vite raw import (no node:fs) — the skill lives in this repo at
-// skills/planning/SKILL.md.
-import skill from '../../../skills/planning/SKILL.md?raw'
+// skills/plans/SKILL.md.
+import skill from '../../../skills/plans/SKILL.md?raw'
 import { PLAN_STATE_DEFS } from './states'
 
 /**
- * The `planning` skill (skills/planning/SKILL.md) documents the plan lifecycle
+ * The `plans` skill (skills/plans/SKILL.md) documents the plan lifecycle
  * in prose — an installed copy can't import states.ts, so the two can drift.
  * This test keeps the skill's canonical declarations pinned to PLAN_STATE_DEFS
  * so any change to one fails until the other is updated to match.
  */
 
-describe('planning skill stays in sync with PLAN_STATE_DEFS', () => {
+describe('plans skill stays in sync with PLAN_STATE_DEFS', () => {
   it('documents the lifecycle in board order', () => {
     const sequence = PLAN_STATE_DEFS.map((s) => s.id).join(' → ')
     expect(skill).toContain(sequence)

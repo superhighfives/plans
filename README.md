@@ -1,14 +1,14 @@
 # Plans
 
 A multi-tenant web app on Cloudflare that reads the `plans/` directories across
-your GitHub repos (the ones that use the [`planning`](skills/planning/SKILL.md)
+your GitHub repos (the ones that use the [`plans`](skills/plans/SKILL.md)
 skill) and lets you browse them by state — **backlog, ready, in-progress, done** —
 in one place. GitHub is the source of truth; the app only ever reads and (in
 later phases) writes plans through the GitHub API.
 
-The `planning` skill lives in this repo too — it's the spec this app reads, so
+The `plans` skill lives in this repo too — it's the spec this app reads, so
 the two share one source of truth for the lifecycle. See
-[The `planning` skill](#the-planning-skill) below.
+[The `plans` skill](#the-plans-skill) below.
 
 This repo currently implements **Phase 0 (foundations)** and **Phase 1 (the
 read-only reader)**. Editing, AI moves, and Flue chat are later phases — see the
@@ -30,11 +30,11 @@ read-only reader)**. Editing, AI moves, and Flue chat are later phases — see t
 Only top-level `plans/<state>/*.md` files with valid frontmatter (a non-empty
 `title`) are recognized; anything else is silently skipped ("detect and skip").
 
-## The `planning` skill
+## The `plans` skill
 
-[`skills/planning/SKILL.md`](skills/planning/SKILL.md) is the agent skill that
+[`skills/plans/SKILL.md`](skills/plans/SKILL.md) is the agent skill that
 *writes* the `plans/` structure this app *reads* — the four states, the naming
-convention, the frontmatter schema, and the `/planning` slash-command modes. It
+convention, the frontmatter schema, and the `/plans` slash-command modes. It
 lives here (rather than in a general skills collection) because the skill and the
 app are two halves of one contract: change the lifecycle in one and you change it
 in the other.
@@ -50,7 +50,7 @@ Install the skill globally with the [`skills`](https://github.com/vercel-labs/sk
 CLI:
 
 ```sh
-npx skills add superhighfives/plans --skill planning -g
+npx skills add superhighfives/plans --skill plans -g
 ```
 
 ## Stack
@@ -98,7 +98,7 @@ src/
     api/                 OAuth login/callback, logout, GitHub webhook (server routes)
 migrations/              D1 SQL migrations (drizzle-kit)
 skills/
-  planning/SKILL.md      The planning skill — the plans/ contract this app reads
+  plans/SKILL.md         The plans skill — the plans/ contract this app reads
 ```
 
 ## Setup

@@ -1,5 +1,5 @@
 /**
- * A small, dependency-free frontmatter parser for the planning skill's format.
+ * A small, dependency-free frontmatter parser for the plans skill's format.
  *
  * The skill writes a leading `---` YAML block with simple scalar keys
  * (`title`, `status`, `created`, `updated`) followed by a markdown body. We

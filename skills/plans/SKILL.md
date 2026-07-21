@@ -1,9 +1,9 @@
 ---
-name: planning
+name: plans
 description: >-
   Use when working on a project that uses a plans/ directory to manage
   implementation specs through a backlog → ready → in-progress → done lifecycle,
-  or when the /planning slash command is invoked. Covers bootstrapping the
+  or when the /plans slash command is invoked. Covers bootstrapping the
   directory structure, brainstorming new ideas, promoting them to specs,
   starting and finishing work, tidying, and documenting what was actually built.
 metadata:
@@ -11,7 +11,7 @@ metadata:
   version: "2.0.0"
 ---
 
-# Planning
+# Plans
 
 Projects that use this workflow keep implementation plans as markdown files in a `plans/` directory. Plans move through four states, one per subdirectory: `backlog/`, `ready/`, `in-progress/`, `done/`. `plans/README.md` is the canonical documentation for a given project - always defer to it over this skill if they conflict.
 
@@ -112,30 +112,30 @@ How the pieces fit together, key files or modules, and any deviations from the o
 
 A `done/` plan that matches the spec exactly is fine. A `done/` plan that pretends there were no deviations when there were is worse than no plan at all.
 
-## Modes (via `/planning`)
+## Modes (via `/plans`)
 
-If a `/planning` slash command is wired up, it dispatches to one of these modes. Each mode should first check that `plans/` is bootstrapped and create it if not.
+If a `/plans` slash command is wired up, it dispatches to one of these modes. Each mode should first check that `plans/` is bootstrapped and create it if not.
 
-### `/planning --help`
+### `/plans --help`
 Print a concise summary of the workflow and every mode, then stop. Don't touch `plans/` or bootstrap anything - `--help` is read-only. Output the table below verbatim (adjust wording only if `plans/README.md` overrides it):
 
 ```
-/planning                         Show status: counts per directory, in-progress plans, tidy warnings.
-/planning --help                  Show this help.
-/planning --new <idea>            Rough out a new idea into plans/backlog/ (alias: --brainstorm).
-/planning --prepare <idea|file>   Promote a backlog idea or fresh idea into a full spec in plans/ready/.
-/planning --start <plan-name>     Move a ready plan to plans/in-progress/ and begin implementation.
-/planning --finish [plan-name]    Move an in-progress plan to plans/done/ with Overview + Architecture.
-/planning --tidy                  Audit plans/: validate frontmatter, statuses, staleness, structure.
+/plans                         Show status: counts per directory, in-progress plans, tidy warnings.
+/plans --help                  Show this help.
+/plans --new <idea>            Rough out a new idea into plans/backlog/ (alias: --brainstorm).
+/plans --prepare <idea|file>   Promote a backlog idea or fresh idea into a full spec in plans/ready/.
+/plans --start <plan-name>     Move a ready plan to plans/in-progress/ and begin implementation.
+/plans --finish [plan-name]    Move an in-progress plan to plans/done/ with Overview + Architecture.
+/plans --tidy                  Audit plans/: validate frontmatter, statuses, staleness, structure.
 
 Lifecycle: backlog → ready → in-progress → done (one subdirectory each).
 plans/README.md is the source of truth for a project and wins over this skill.
 ```
 
-### `/planning` (no flag) - status
+### `/plans` (no flag) - status
 Show a summary: counts per directory, list of `in-progress/` plans with their `updated` dates, and any tidy warnings. Bootstrap the structure if missing.
 
-### `/planning --tidy`
+### `/plans --tidy`
 Audit `plans/` and fix or flag:
 - Frontmatter present and valid on every plan.
 - `status` matches the directory the file lives in.
@@ -145,19 +145,19 @@ Audit `plans/` and fix or flag:
 
 Fix mechanical issues directly. Surface judgement calls (stalled work, missing docs) as a list for the human.
 
-### `/planning --new <idea>` (alias: `--brainstorm`)
+### `/plans --new <idea>` (alias: `--brainstorm`)
 Explore intent first (use a brainstorming skill if one is available), then write a short plan into `plans/backlog/` with `status: Backlog`. Keep it rough - backlog entries are ideas, not specs.
 
-### `/planning --prepare <idea-or-backlog-file>`
+### `/plans --prepare <idea-or-backlog-file>`
 Promote an idea (either a `backlog/` file or a fresh idea from the argument) into a full spec in `plans/ready/` using the template above. Resolve any open questions before saving as ready.
 
-### `/planning --start <plan-name>`
+### `/plans --start <plan-name>`
 1. Locate the plan in `plans/ready/` (or `backlog/` if the user is skipping ahead).
 2. Move it to `plans/in-progress/`.
 3. Set `status: In Progress` and update `updated`.
 4. Read the plan and begin implementation. Keep it current as decisions land.
 
-### `/planning --finish [plan-name]`
+### `/plans --finish [plan-name]`
 If no name is given and there's exactly one `in-progress/` plan, use that. Otherwise ask.
 
 1. Move the file to `plans/done/`.
