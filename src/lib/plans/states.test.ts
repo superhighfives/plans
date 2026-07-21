@@ -3,7 +3,10 @@ import { isPlanPath, parsePlanPath } from './states'
 
 describe('parsePlanPath', () => {
   it('recognizes top-level plan files in each state dir', () => {
-    expect(parsePlanPath('plans/backlog/idea.md')).toEqual({ state: 'backlog', slug: 'idea' })
+    expect(parsePlanPath('plans/backlog/idea.md')).toEqual({
+      state: 'backlog',
+      slug: 'idea',
+    })
     expect(parsePlanPath('plans/ready/planning-cms.md')).toEqual({
       state: 'ready',
       slug: 'planning-cms',
@@ -12,7 +15,10 @@ describe('parsePlanPath', () => {
       state: 'in-progress',
       slug: 'thing',
     })
-    expect(parsePlanPath('plans/done/shipped.md')).toEqual({ state: 'done', slug: 'shipped' })
+    expect(parsePlanPath('plans/done/shipped.md')).toEqual({
+      state: 'done',
+      slug: 'shipped',
+    })
   })
 
   it('rejects non-plan paths (detect-and-skip)', () => {

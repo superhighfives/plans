@@ -1,7 +1,7 @@
 import { and, eq, inArray } from 'drizzle-orm'
 import type { Db } from '~/db'
-import { installations, userInstallations, users } from '~/db/schema'
 import type { User } from '~/db/schema'
+import { installations, userInstallations, users } from '~/db/schema'
 import { newId } from '~/lib/crypto'
 import type { GitHubUser, UserInstallation } from '~/lib/github/oauth'
 
@@ -69,12 +69,17 @@ export async function upsertUserAndInstallations(
   }
 
   // Rebuild the mapping for this user (drop stale links, add current ones).
-  await db.delete(userInstallations).where(eq(userInstallations.userId, user.id))
+  await db
+    .delete(userInstallations)
+    .where(eq(userInstallations.userId, user.id))
   if (installationIds.length > 0) {
     await db
       .insert(userInstallations)
       .values(
-        installationIds.map((installationId) => ({ userId: user.id, installationId })),
+        installationIds.map((installationId) => ({
+          userId: user.id,
+          installationId,
+        })),
       )
       .onConflictDoNothing()
   }
@@ -89,7 +94,10 @@ export async function getUserById(db: Db, id: string): Promise<User | null> {
 }
 
 /** The installation ids a user may access. */
-export async function getUserInstallationIds(db: Db, userId: string): Promise<string[]> {
+export async function getUserInstallationIds(
+  db: Db,
+  userId: string,
+): Promise<string[]> {
   const rows = await db
     .select({ installationId: userInstallations.installationId })
     .from(userInstallations)

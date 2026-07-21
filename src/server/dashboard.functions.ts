@@ -1,6 +1,6 @@
-import { and, eq, inArray } from 'drizzle-orm'
 import { createServerFn } from '@tanstack/react-start'
-import { getDb, type Db } from '~/db'
+import { and, eq, inArray } from 'drizzle-orm'
+import { type Db, getDb } from '~/db'
 import { installations as installationsTable, repos } from '~/db/schema'
 import { getEnv } from '~/env'
 import { authMiddleware } from './auth-middleware'
@@ -58,7 +58,10 @@ async function buildDashboard(db: Db, userId: string): Promise<Dashboard> {
       defaultBranch: r.defaultBranch,
     })
     reposByInstallation.set(r.installationId, list)
-    if (r.lastScannedAt && (!lastScannedAt || r.lastScannedAt > lastScannedAt)) {
+    if (
+      r.lastScannedAt &&
+      (!lastScannedAt || r.lastScannedAt > lastScannedAt)
+    ) {
       lastScannedAt = r.lastScannedAt
     }
   }

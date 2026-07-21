@@ -74,7 +74,9 @@ export const repos = sqliteTable(
       .notNull()
       .default(false),
     /** Whether a top-level plans/ directory was found on the last scan. */
-    hasPlans: integer('has_plans', { mode: 'boolean' }).notNull().default(false),
+    hasPlans: integer('has_plans', { mode: 'boolean' })
+      .notNull()
+      .default(false),
     /** Head commit sha the cache was built from. */
     lastScannedSha: text('last_scanned_sha'),
     lastScannedAt: integer('last_scanned_at'),
@@ -123,8 +125,12 @@ export const auditLog = sqliteTable(
   'audit_log',
   {
     id: text('id').primaryKey(),
-    userId: text('user_id').references(() => users.id, { onDelete: 'set null' }),
-    repoId: text('repo_id').references(() => repos.id, { onDelete: 'set null' }),
+    userId: text('user_id').references(() => users.id, {
+      onDelete: 'set null',
+    }),
+    repoId: text('repo_id').references(() => repos.id, {
+      onDelete: 'set null',
+    }),
     /** e.g. 'plan.update' | 'plan.move' | 'plan.create' */
     action: text('action').notNull(),
     /** JSON array of affected paths. */

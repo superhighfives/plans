@@ -80,7 +80,10 @@ export async function githubPaginate<T>(
       },
     })
     if (!res.ok) {
-      throw new GitHubError(`GitHub pagination failed: ${res.status}`, res.status)
+      throw new GitHubError(
+        `GitHub pagination failed: ${res.status}`,
+        res.status,
+      )
     }
     const json = (await res.json()) as unknown
     const page = opts.arrayKey

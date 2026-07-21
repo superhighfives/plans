@@ -1,5 +1,5 @@
 import type { AppEnv } from '~/env'
-import { githubPaginate, GitHubError } from './client'
+import { GitHubError, githubPaginate } from './client'
 
 export interface GitHubUser {
   id: number
@@ -29,7 +29,10 @@ export function buildAuthorizeUrl(env: AppEnv, state: string): string {
 }
 
 /** Exchange an authorization code for a user access token. */
-export async function exchangeCodeForToken(env: AppEnv, code: string): Promise<string> {
+export async function exchangeCodeForToken(
+  env: AppEnv,
+  code: string,
+): Promise<string> {
   const res = await fetch('https://github.com/login/oauth/access_token', {
     method: 'POST',
     headers: {
@@ -47,9 +50,16 @@ export async function exchangeCodeForToken(env: AppEnv, code: string): Promise<s
   if (!res.ok) {
     throw new GitHubError('Failed to exchange OAuth code', res.status)
   }
-  const json = (await res.json()) as { access_token?: string; error?: string; error_description?: string }
+  const json = (await res.json()) as {
+    access_token?: string
+    error?: string
+    error_description?: string
+  }
   if (!json.access_token) {
-    throw new GitHubError(json.error_description ?? json.error ?? 'No access token returned', 400)
+    throw new GitHubError(
+      json.error_description ?? json.error ?? 'No access token returned',
+      400,
+    )
   }
   return json.access_token
 }
@@ -69,7 +79,9 @@ export async function fetchAuthedUser(token: string): Promise<GitHubUser> {
 }
 
 /** List the App installations this user can access (their own + orgs). */
-export async function fetchUserInstallations(token: string): Promise<UserInstallation[]> {
+export async function fetchUserInstallations(
+  token: string,
+): Promise<UserInstallation[]> {
   return githubPaginate<UserInstallation>('/user/installations', {
     token,
     arrayKey: 'installations',

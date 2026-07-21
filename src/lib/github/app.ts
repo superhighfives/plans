@@ -1,11 +1,11 @@
 import { eq } from 'drizzle-orm'
 import type { Db } from '~/db'
-import { installations as installationsTable } from '~/db/schema'
 import type { Installation } from '~/db/schema'
+import { installations as installationsTable } from '~/db/schema'
 import type { AppEnv } from '~/env'
 import { decryptSecret, encryptSecret } from '~/lib/crypto'
-import { createAppJwt } from './jwt'
 import { githubPaginate, githubRequest } from './client'
+import { createAppJwt } from './jwt'
 
 /** Refresh a cached installation token when it's within this window of expiry. */
 const TOKEN_REFRESH_SKEW_MS = 5 * 60 * 1000
@@ -57,9 +57,13 @@ async function readCachedToken(
   installation: Installation,
 ): Promise<string | null> {
   if (!installation.tokenCiphertext || !installation.tokenExpiresAt) return null
-  if (installation.tokenExpiresAt - Date.now() < TOKEN_REFRESH_SKEW_MS) return null
+  if (installation.tokenExpiresAt - Date.now() < TOKEN_REFRESH_SKEW_MS)
+    return null
   try {
-    return await decryptSecret(env.TOKEN_ENCRYPTION_KEY, installation.tokenCiphertext)
+    return await decryptSecret(
+      env.TOKEN_ENCRYPTION_KEY,
+      installation.tokenCiphertext,
+    )
   } catch {
     // Key rotated or corrupt cache — fall back to minting a fresh token.
     return null
@@ -76,7 +80,9 @@ export interface InstallationRepo {
 }
 
 /** List every repository the installation can access. */
-export async function listInstallationRepos(token: string): Promise<InstallationRepo[]> {
+export async function listInstallationRepos(
+  token: string,
+): Promise<InstallationRepo[]> {
   return githubPaginate<InstallationRepo>('/installation/repositories', {
     token,
     arrayKey: 'repositories',

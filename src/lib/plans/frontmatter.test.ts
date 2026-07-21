@@ -39,7 +39,7 @@ describe('parseFrontmatter', () => {
   })
 
   it('strips surrounding quotes from values', () => {
-    const doc = "---\ntitle: \"A: colon title\"\nstatus: 'Backlog'\n---\nBody"
+    const doc = '---\ntitle: "A: colon title"\nstatus: \'Backlog\'\n---\nBody'
     const { data } = parseFrontmatter(doc)
     expect(data.title).toBe('A: colon title')
     expect(data.status).toBe('Backlog')
@@ -51,7 +51,9 @@ describe('parseFrontmatter', () => {
   })
 
   it('returns no frontmatter for plain markdown', () => {
-    const { data, content, hasFrontmatter } = parseFrontmatter('# Just markdown\n\nHi')
+    const { data, content, hasFrontmatter } = parseFrontmatter(
+      '# Just markdown\n\nHi',
+    )
     expect(hasFrontmatter).toBe(false)
     expect(data).toEqual({})
     expect(content).toBe('# Just markdown\n\nHi')
@@ -80,10 +82,17 @@ describe('serializeFrontmatter', () => {
 
   it('emits keys in canonical order', () => {
     const out = serializeFrontmatter(
-      { updated: '2026-01-02', title: 'T', created: '2026-01-01', status: 'Done' },
+      {
+        updated: '2026-01-02',
+        title: 'T',
+        created: '2026-01-01',
+        status: 'Done',
+      },
       'Body',
     )
-    expect(out).toBe('---\ntitle: T\nstatus: Done\ncreated: 2026-01-01\nupdated: 2026-01-02\n---\n\nBody')
+    expect(out).toBe(
+      '---\ntitle: T\nstatus: Done\ncreated: 2026-01-01\nupdated: 2026-01-02\n---\n\nBody',
+    )
   })
 
   it('quotes values that need it', () => {

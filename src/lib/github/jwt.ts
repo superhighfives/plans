@@ -6,7 +6,10 @@ import { fromBase64, toBase64Url } from '~/lib/crypto'
  * format GitHub hands you) — PKCS#1 is transparently wrapped into PKCS#8 since
  * WebCrypto only imports PKCS#8.
  */
-export async function createAppJwt(appId: string, privateKeyPem: string): Promise<string> {
+export async function createAppJwt(
+  appId: string,
+  privateKeyPem: string,
+): Promise<string> {
   const key = await importRsaPrivateKey(privateKeyPem)
   const nowSec = Math.floor(Date.now() / 1000)
   const header = { alg: 'RS256', typ: 'JWT' }
@@ -94,8 +97,8 @@ function wrapPkcs1InPkcs8(pkcs1: Uint8Array): Uint8Array {
   const version = new Uint8Array([0x02, 0x01, 0x00]) // INTEGER 0
   // AlgorithmIdentifier: SEQUENCE { OID 1.2.840.113549.1.1.1, NULL }
   const algId = new Uint8Array([
-    0x30, 0x0d, 0x06, 0x09, 0x2a, 0x86, 0x48, 0x86, 0xf7, 0x0d, 0x01, 0x01, 0x01,
-    0x05, 0x00,
+    0x30, 0x0d, 0x06, 0x09, 0x2a, 0x86, 0x48, 0x86, 0xf7, 0x0d, 0x01, 0x01,
+    0x01, 0x05, 0x00,
   ])
   const privateKeyOctet = derTlv(0x04, pkcs1) // OCTET STRING
   return derTlv(0x30, concat(version, algId, privateKeyOctet)) // SEQUENCE

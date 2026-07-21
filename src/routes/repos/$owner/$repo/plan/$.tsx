@@ -8,7 +8,11 @@ import { getPlan } from '~/server/repo.functions'
 export const Route = createFileRoute('/repos/$owner/$repo/plan/$')({
   loader: ({ params }): Promise<PlanDetail> =>
     getPlan({
-      data: { owner: params.owner, repo: params.repo, path: params._splat ?? '' },
+      data: {
+        owner: params.owner,
+        repo: params.repo,
+        path: params._splat ?? '',
+      },
     }),
   head: ({ loaderData }) => ({
     meta: [{ title: loaderData ? `${loaderData.title} · Plans` : 'Plan' }],
@@ -61,7 +65,9 @@ function PlanPage() {
           ) : null}
           <div>
             <dt>Path</dt>
-            <dd><code>{plan.path}</code></dd>
+            <dd>
+              <code>{plan.path}</code>
+            </dd>
           </div>
         </dl>
       </header>

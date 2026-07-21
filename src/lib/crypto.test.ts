@@ -16,7 +16,9 @@ const key32 = toBase64(new Uint8Array(32).fill(7)) // deterministic 32-byte key
 describe('base64url', () => {
   it('round-trips bytes', () => {
     const bytes = new Uint8Array([0, 1, 2, 250, 255, 128, 64])
-    expect(Array.from(fromBase64Url(toBase64Url(bytes)))).toEqual(Array.from(bytes))
+    expect(Array.from(fromBase64Url(toBase64Url(bytes)))).toEqual(
+      Array.from(bytes),
+    )
   })
 })
 
@@ -35,7 +37,9 @@ describe('AES-GCM secret encryption', () => {
   })
 
   it('rejects a wrong-length key', async () => {
-    await expect(encryptSecret(toBase64(new Uint8Array(16)), 'x')).rejects.toThrow()
+    await expect(
+      encryptSecret(toBase64(new Uint8Array(16)), 'x'),
+    ).rejects.toThrow()
   })
 })
 
@@ -51,7 +55,9 @@ describe('HMAC', () => {
     // Reference value computed with Node crypto for secret "It's a Secret to Everybody"
     // over the body "Hello, World!" — the example from GitHub's webhook docs.
     const hex = await hmacHex("It's a Secret to Everybody", 'Hello, World!')
-    expect(hex).toBe('757107ea0eb2509fc211221cce984b8a37570b6d7586c22c46f4379c8b043e17')
+    expect(hex).toBe(
+      '757107ea0eb2509fc211221cce984b8a37570b6d7586c22c46f4379c8b043e17',
+    )
   })
 })
 

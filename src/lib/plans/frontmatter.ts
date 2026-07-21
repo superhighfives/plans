@@ -76,7 +76,10 @@ export function parseFrontmatter(input: string): ParsedPlan {
   }
 
   // Body is everything after the closing delimiter, minus one leading blank line.
-  const body = lines.slice(closeIdx + 1).join('\n').replace(/^\n/, '')
+  const body = lines
+    .slice(closeIdx + 1)
+    .join('\n')
+    .replace(/^\n/, '')
   return { data, content: body, hasFrontmatter: true }
 }
 
@@ -84,7 +87,10 @@ export function parseFrontmatter(input: string): ParsedPlan {
  * Serialize frontmatter + body back into a markdown document. Used by the
  * write path (Phase 2). Emits keys in a stable, plan-friendly order.
  */
-export function serializeFrontmatter(data: Frontmatter, content: string): string {
+export function serializeFrontmatter(
+  data: Frontmatter,
+  content: string,
+): string {
   const ORDER = ['title', 'status', 'created', 'updated']
   const keys = [
     ...ORDER.filter((k) => data[k] != null),

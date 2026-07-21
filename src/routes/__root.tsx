@@ -1,4 +1,3 @@
-import type { ReactNode } from 'react'
 import {
   createRootRoute,
   HeadContent,
@@ -6,7 +5,8 @@ import {
   Outlet,
   Scripts,
 } from '@tanstack/react-router'
-import { getCurrentUser, type CurrentUser } from '~/server/auth.functions'
+import type { ReactNode } from 'react'
+import { type CurrentUser, getCurrentUser } from '~/server/auth.functions'
 import appCss from '~/styles/app.css?url'
 
 export const Route = createRootRoute({
@@ -43,22 +43,34 @@ function Header({ user }: { user: CurrentUser | null }) {
     <header className="site-header">
       <div className="container site-header__inner">
         <Link to="/" className="brand">
-          <span className="brand__mark" aria-hidden>◇</span>
+          <span className="brand__mark" aria-hidden>
+            ◇
+          </span>
           <span>Plans</span>
         </Link>
         <div className="site-header__right">
           {user ? (
             <>
               {user.avatarUrl ? (
-                <img className="avatar" src={user.avatarUrl} alt="" width={28} height={28} />
+                <img
+                  className="avatar"
+                  src={user.avatarUrl}
+                  alt=""
+                  width={28}
+                  height={28}
+                />
               ) : null}
               <span className="site-header__login">{user.login}</span>
               <form method="post" action="/api/auth/logout">
-                <button type="submit" className="btn btn--ghost">Sign out</button>
+                <button type="submit" className="btn btn--ghost">
+                  Sign out
+                </button>
               </form>
             </>
           ) : (
-            <a className="btn" href="/api/auth/github/login">Sign in with GitHub</a>
+            <a className="btn" href="/api/auth/github/login">
+              Sign in with GitHub
+            </a>
           )}
         </div>
       </div>
