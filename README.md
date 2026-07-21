@@ -98,7 +98,7 @@ Browser (TanStack Start / React)
       │  route loaders → server functions (RPC)
       ▼
 Cloudflare Worker
-      ├── GitHub App      → installation tokens → repo contents (read)
+      ├── GitHub App      → installation tokens → repo contents + PRs (read)
       ├── D1 (Drizzle)    → users, installations, repos, plan cache, audit
       └── WebCrypto       → App JWT, token encryption, cookie signing
 ```
@@ -140,9 +140,14 @@ Create one App (Settings → Developer settings → GitHub Apps → New):
 - **Callback URL:** `https://plans.superhighfives.com/api/auth/github/callback`
   (and `http://localhost:5173/api/auth/github/callback` for local dev).
 - **Webhook URL:** `https://plans.superhighfives.com/api/webhooks/github`, with a **webhook secret**.
-- **Permissions:** Repository **Contents: Read-only**, **Metadata: Read-only**.
-  (Contents becomes read-write in Phase 2.)
-- **Subscribe to events:** `Push`, `Installation`, `Installation repositories`.
+- **Permissions:** Repository **Contents: Read-only**, **Metadata: Read-only**,
+  **Pull requests: Read-only** (the last powers branch/PR plan activity on the
+  board and the plan detail's branch tabs). (Contents becomes read-write in
+  Phase 2.) Adding Pull requests to an existing App makes each installation
+  owner re-approve; until they do, the board degrades to a "grant access"
+  notice instead of erroring.
+- **Subscribe to events:** `Push`, `Pull request`, `Installation`,
+  `Installation repositories`.
 - Enable **"Request user authorization (OAuth) during installation"** /
   generate a client secret so user login works.
 - Generate a **private key** (downloads a `.pem`).
