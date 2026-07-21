@@ -41,15 +41,24 @@ just this app:
 curl -fsSL plans.superhighfives.com/start | sh
 ```
 
-It installs the `plans` skill into `.claude/skills/plans/`, adds a `plans`
-section to `AGENTS.md`, and creates `plans/{backlog,ready,in-progress,done}/`
-with a seeded `README.md`. It's idempotent and never clobbers existing files, so
-re-running it is safe. Working with an agent, just say *"run
-`plans.superhighfives.com/start` in this repo"* — it runs the same `curl`.
+It installs the `plans` skill for your agents — both `.agents/skills/plans/`
+(the shared convention opencode et al. read) and `.claude/skills/plans/` (Claude
+Code) — adds a `plans` section to `AGENTS.md`, and creates
+`plans/{backlog,ready,in-progress,done}/` with a seeded `README.md`. It's
+idempotent and never clobbers existing files, so re-running it is safe. Working
+with an agent, just say *"run `plans.superhighfives.com/start` in this repo"* —
+it runs the same `curl`.
 
-The app serves its own skill at `/start/skill`, so `/start` has no dependency
-beyond the app. See [`plans/done/start-endpoint.md`](plans/done/start-endpoint.md)
-for the design.
+Refresh the skill later without re-bootstrapping:
+
+```sh
+curl -fsSL plans.superhighfives.com/start | sh -s -- update
+```
+
+Visiting the URL in a browser (or an agent fetching it) shows a readable page
+instead of the script — `/start` content-negotiates on `Accept`. The app serves
+its own skill at `/start/skill`, so `/start` has no dependency beyond the app.
+See [`plans/done/start-endpoint.md`](plans/done/start-endpoint.md) for the design.
 
 ## The `plans` skill
 

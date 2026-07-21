@@ -111,11 +111,21 @@ Both endpoints are intentionally **public and unauthenticated** — an agent in 
 brand-new repo has no session, and the served content (a skill file, a shell
 script) is non-sensitive.
 
-### Open questions carried forward (v1 leanings)
+### Follow-ups (v2, shipped)
 
-- **Multi-agent install.** v1 targets Claude Code (`.claude/skills/`) only;
-  writing opencode/other agent dirs is a later extension.
-- **Agent-native variant.** Script-only for now; a content-negotiated markdown
-  runbook can be added if the agent flow feels clunky.
-- **Skill freshness.** The copied `SKILL.md` is a point-in-time snapshot;
-  re-running `/start` re-pulls it. A dedicated `plans update` path is deferred.
+All three v1 leanings were subsequently built:
+
+- **Multi-agent install.** The script now installs to both `.agents/skills/plans/`
+  (the cross-agent canonical dir opencode et al. read) and `.claude/skills/plans/`
+  — matching the layout the `skills` CLI produces for a `--copy` project install,
+  confirmed by observing a real CLI run. `AGENT_SKILL_DIRS` in `bootstrap.ts` is
+  the single list driving install and update.
+- **Content-negotiated runbook.** `GET /start` now branches on `Accept`: `curl`
+  (`*/*`) gets the shell script; a browser/agent (`text/html`) gets a small
+  self-contained HTML page (`renderStartPage`) that doubles as a readable runbook.
+- **`plans update`.** `curl … | sh -s -- update` re-pulls the skill into every
+  agent dir and exits, without touching AGENTS.md or `plans/`.
+
+Verified end-to-end against the dev server: multi-agent bootstrap writes both
+dirs, idempotent re-run stays a no-op, `update` refreshes stale skill files, and
+content negotiation returns the script vs the HTML page by `Accept`.
