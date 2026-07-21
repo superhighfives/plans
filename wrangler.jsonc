@@ -14,8 +14,7 @@
     {
       "binding": "DB",
       "database_name": "plans",
-      // Replace with the id printed by `wrangler d1 create plans`.
-      "database_id": "REPLACE_WITH_D1_DATABASE_ID",
+      "database_id": "a325feee-984d-464b-bee9-7c90a984887f",
       "migrations_dir": "migrations"
     }
   ]
