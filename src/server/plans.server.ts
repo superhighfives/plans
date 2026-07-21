@@ -184,13 +184,18 @@ export async function loadRepoPlans(
     await db.delete(planCache).where(inArray(planCache.id, stalePaths))
   }
 
-  // Record the tree sha we cached against.
+  // Record the tree sha we cached against. `hasPlans` uses the same metric as
+  // discovery (`scanRepo`): whether any file matches the plans/<state>/*.md
+  // path — NOT whether any has valid frontmatter. The two paths must agree, or
+  // opening a repo whose plan files lack frontmatter would silently downgrade
+  // `hasPlans` and evict it from the dashboard. A repo with matching paths but
+  // no valid plans stays listed and renders its "No plans found" empty state.
   await db
     .update(repos)
     .set({
       lastScannedSha: tree.treeSha,
       lastScannedAt: nowMs,
-      hasPlans: summaries.length > 0,
+      hasPlans: tree.entries.length > 0,
       updatedAt: nowMs,
     })
     .where(eq(repos.id, repo.id))
