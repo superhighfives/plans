@@ -3,11 +3,16 @@ name: Deploy
 # Gated on CI: this runs only after the "CI" workflow finishes on `main`.
 # The `if` below then filters to *successful* CI runs, so a red build never
 # reaches production. Deploys are never triggered directly by a push.
+#
+# `workflow_dispatch` also exposes a manual "Run workflow" button in the Actions
+# UI, which deploys the current tip of the chosen branch (bypassing the CI gate
+# — use for hotfixes / first deploy).
 on:
   workflow_run:
     workflows: [CI]
     types: [completed]
     branches: [main]
+  workflow_dispatch:
 
 concurrency:
   group: deploy-${{ github.ref }}
@@ -19,15 +24,16 @@ permissions:
 jobs:
   deploy:
     name: migrate · deploy
-    # Only deploy when the CI run we're reacting to actually succeeded.
-    if: ${{ github.event.workflow_run.conclusion == 'success' }}
+    # Deploy on a successful CI run, or on a manual dispatch (no CI run to gate).
+    if: ${{ github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success' }}
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
         with:
-          # Check out the exact commit CI validated, not just latest main.
-          ref: ${{ github.event.workflow_run.head_sha }}
+          # Check out the exact commit CI validated; on manual dispatch this is
+          # empty, so checkout falls back to the dispatched branch's tip.
+          ref: ${{ github.event.workflow_run.head_sha || github.ref }}
 
       - uses: actions/setup-node@v4
         with:
