@@ -70,9 +70,7 @@ export function isPlanState(value: string): value is PlanState {
  * skill's state directories is recognized. Files directly in `plans/`, nested
  * deeper, or in unknown subdirectories are ignored.
  */
-const PLAN_PATH_RE = new RegExp(
-  `^plans/(${PLAN_STATES.join('|')})/[^/]+\\.md$`,
-)
+const PLAN_PATH_RE = new RegExp(`^plans/(${PLAN_STATES.join('|')})/[^/]+\\.md$`)
 
 export interface PlanPathInfo {
   state: PlanState
