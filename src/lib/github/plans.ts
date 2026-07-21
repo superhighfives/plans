@@ -1,6 +1,6 @@
 import { fromBase64 } from '~/lib/crypto'
 import { isPlanPath } from '~/lib/plans/states'
-import { githubRequest } from './client'
+import { githubPaginate, githubRequest } from './client'
 
 interface TreeResponse {
   sha: string
@@ -39,6 +39,62 @@ export async function listPlanTree(
     .filter((e) => e.type === 'blob' && isPlanPath(e.path))
     .map((e) => ({ path: e.path, sha: e.sha }))
   return { treeSha: res.sha, entries, truncated: res.truncated }
+}
+
+interface PullResponse {
+  number: number
+  title: string
+  draft?: boolean
+  html_url: string
+  updated_at: string
+  user: { login: string } | null
+  head: { ref: string; sha: string }
+  base: { ref: string }
+}
+
+/** An open pull request, trimmed to what the board needs. */
+export interface OpenPullRequest {
+  number: number
+  title: string
+  authorLogin: string | null
+  /** Branch name the PR is merging from. */
+  headRef: string
+  /** Head commit sha — the ref we read the branch's plan tree at. */
+  headSha: string
+  /** Branch the PR targets (usually the default branch). */
+  baseRef: string
+  draft: boolean
+  /** github.com PR URL. */
+  url: string
+  /** ISO timestamp of the PR's last update. */
+  updatedAt: string
+}
+
+/**
+ * List a repo's open pull requests. Requires the App's `pull_requests: read`
+ * permission — without it GitHub returns 403 (surfaced as a GitHubError), which
+ * callers catch to degrade gracefully.
+ */
+export async function listOpenPullRequests(
+  token: string,
+  owner: string,
+  repo: string,
+): Promise<OpenPullRequest[]> {
+  const pulls = await githubPaginate<PullResponse>(
+    `/repos/${owner}/${repo}/pulls?state=open`,
+    { token },
+  )
+  return pulls.map((p) => ({
+    number: p.number,
+    title: p.title,
+    authorLogin: p.user?.login ?? null,
+    headRef: p.head.ref,
+    headSha: p.head.sha,
+    baseRef: p.base.ref,
+    draft: Boolean(p.draft),
+    url: p.html_url,
+    updatedAt: p.updated_at,
+  }))
 }
 
 interface ContentFileResponse {
