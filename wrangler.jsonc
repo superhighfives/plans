@@ -7,6 +7,9 @@
   "observability": {
     "enabled": true
   },
+  // Production hostname. Requires the `superhighfives.com` zone to be on this
+  // Cloudflare account; Workers provisions the DNS record + cert automatically.
+  "routes": [{ "pattern": "plans.superhighfives.com", "custom_domain": true }],
   "d1_databases": [
     {
       "binding": "DB",

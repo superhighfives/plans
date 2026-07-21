@@ -78,9 +78,9 @@ migrations/              D1 SQL migrations (drizzle-kit)
 
 Create one App (Settings → Developer settings → GitHub Apps → New):
 
-- **Callback URL:** `https://<your-domain>/api/auth/github/callback`
+- **Callback URL:** `https://plans.superhighfives.com/api/auth/github/callback`
   (and `http://localhost:5173/api/auth/github/callback` for local dev).
-- **Webhook URL:** `https://<your-domain>/api/webhooks/github`, with a **webhook secret**.
+- **Webhook URL:** `https://plans.superhighfives.com/api/webhooks/github`, with a **webhook secret**.
 - **Permissions:** Repository **Contents: Read-only**, **Metadata: Read-only**.
   (Contents becomes read-write in Phase 2.)
 - **Subscribe to events:** `Push`, `Installation`, `Installation repositories`.
@@ -112,7 +112,7 @@ for s in GITHUB_APP_ID GITHUB_APP_CLIENT_ID GITHUB_APP_CLIENT_SECRET \
 - `SESSION_SECRET` — `openssl rand -base64 48`
 - `TOKEN_ENCRYPTION_KEY` — `openssl rand -base64 32` (must decode to 32 bytes)
 - `GITHUB_APP_PRIVATE_KEY` — paste the full `.pem` (PKCS#1 or PKCS#8 both work)
-- `APP_URL` — the public origin, no trailing slash (e.g. `https://plans.example.com`)
+- `APP_URL` — the public origin, no trailing slash (`https://plans.superhighfives.com`)
 
 ### 4. Run locally
 
@@ -138,6 +138,11 @@ variables → Actions):
 
 The Worker secrets from step 3 and the D1 `database_id` are set once (as above)
 and persist across deploys — CI never touches them.
+
+Production is served at **https://plans.superhighfives.com** via the
+custom-domain route in `wrangler.jsonc`. Cloudflare provisions the DNS record
+and TLS cert on the first deploy, so the `superhighfives.com` zone must be on
+the same Cloudflare account.
 
 To deploy by hand instead (e.g. the very first deploy, before the workflow is on
 `main`):
