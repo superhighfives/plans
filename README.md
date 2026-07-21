@@ -26,9 +26,30 @@ read-only reader)**. Editing, AI moves, and Flue chat are later phases — see t
 - **Plan view** — rendered markdown body + parsed frontmatter (title, status, dates).
 - **Freshness** — incremental cache keyed by git blob sha, a manual "Rescan"/
   "Refresh", and `push` / `installation` webhook handling.
+- **One-command bootstrap** — `curl -fsSL plans.superhighfives.com/start | sh`
+  turns any repo into a plans-enabled repo (see [Bootstrapping a repo](#bootstrapping-a-repo)).
 
 Only top-level `plans/<state>/*.md` files with valid frontmatter (a non-empty
 `title`) are recognized; anything else is silently skipped ("detect and skip").
+
+## Bootstrapping a repo
+
+Turn any repo into a plans-enabled repo with one command — no `npx`, no auth,
+just this app:
+
+```sh
+curl -fsSL plans.superhighfives.com/start | sh
+```
+
+It installs the `plans` skill into `.claude/skills/plans/`, adds a `plans`
+section to `AGENTS.md`, and creates `plans/{backlog,ready,in-progress,done}/`
+with a seeded `README.md`. It's idempotent and never clobbers existing files, so
+re-running it is safe. Working with an agent, just say *"run
+`plans.superhighfives.com/start` in this repo"* — it runs the same `curl`.
+
+The app serves its own skill at `/start/skill`, so `/start` has no dependency
+beyond the app. See [`plans/done/start-endpoint.md`](plans/done/start-endpoint.md)
+for the design.
 
 ## The `plans` skill
 

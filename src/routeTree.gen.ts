@@ -10,6 +10,8 @@
 
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
+import { Route as StartIndexRouteImport } from './routes/start/index'
+import { Route as StartSkillRouteImport } from './routes/start/skill'
 import { Route as ApiAuthLogoutRouteImport } from './routes/api/auth/logout'
 import { Route as ApiWebhooksGithubRouteImport } from './routes/api/webhooks/github'
 import { Route as ApiAuthGithubCallbackRouteImport } from './routes/api/auth/github/callback'
@@ -20,6 +22,16 @@ import { Route as ReposOwnerRepoPlanSplatRouteImport } from './routes/repos/$own
 const IndexRoute = IndexRouteImport.update({
   id: '/',
   path: '/',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const StartIndexRoute = StartIndexRouteImport.update({
+  id: '/start/',
+  path: '/start/',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const StartSkillRoute = StartSkillRouteImport.update({
+  id: '/start/skill',
+  path: '/start/skill',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ApiAuthLogoutRoute = ApiAuthLogoutRouteImport.update({
@@ -55,6 +67,8 @@ const ReposOwnerRepoPlanSplatRoute = ReposOwnerRepoPlanSplatRouteImport.update({
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
+  '/start/skill': typeof StartSkillRoute
+  '/start/': typeof StartIndexRoute
   '/api/auth/logout': typeof ApiAuthLogoutRoute
   '/api/webhooks/github': typeof ApiWebhooksGithubRoute
   '/api/auth/github/callback': typeof ApiAuthGithubCallbackRoute
@@ -64,6 +78,8 @@ export interface FileRoutesByFullPath {
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
+  '/start/skill': typeof StartSkillRoute
+  '/start': typeof StartIndexRoute
   '/api/auth/logout': typeof ApiAuthLogoutRoute
   '/api/webhooks/github': typeof ApiWebhooksGithubRoute
   '/api/auth/github/callback': typeof ApiAuthGithubCallbackRoute
@@ -74,6 +90,8 @@ export interface FileRoutesByTo {
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
+  '/start/skill': typeof StartSkillRoute
+  '/start/': typeof StartIndexRoute
   '/api/auth/logout': typeof ApiAuthLogoutRoute
   '/api/webhooks/github': typeof ApiWebhooksGithubRoute
   '/api/auth/github/callback': typeof ApiAuthGithubCallbackRoute
@@ -85,6 +103,8 @@ export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
   fullPaths:
     | '/'
+    | '/start/skill'
+    | '/start/'
     | '/api/auth/logout'
     | '/api/webhooks/github'
     | '/api/auth/github/callback'
@@ -94,6 +114,8 @@ export interface FileRouteTypes {
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
+    | '/start/skill'
+    | '/start'
     | '/api/auth/logout'
     | '/api/webhooks/github'
     | '/api/auth/github/callback'
@@ -103,6 +125,8 @@ export interface FileRouteTypes {
   id:
     | '__root__'
     | '/'
+    | '/start/skill'
+    | '/start/'
     | '/api/auth/logout'
     | '/api/webhooks/github'
     | '/api/auth/github/callback'
@@ -113,6 +137,8 @@ export interface FileRouteTypes {
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
+  StartSkillRoute: typeof StartSkillRoute
+  StartIndexRoute: typeof StartIndexRoute
   ApiAuthLogoutRoute: typeof ApiAuthLogoutRoute
   ApiWebhooksGithubRoute: typeof ApiWebhooksGithubRoute
   ApiAuthGithubCallbackRoute: typeof ApiAuthGithubCallbackRoute
@@ -128,6 +154,20 @@ declare module '@tanstack/react-router' {
       path: '/'
       fullPath: '/'
       preLoaderRoute: typeof IndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/start/': {
+      id: '/start/'
+      path: '/start'
+      fullPath: '/start/'
+      preLoaderRoute: typeof StartIndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/start/skill': {
+      id: '/start/skill'
+      path: '/start/skill'
+      fullPath: '/start/skill'
+      preLoaderRoute: typeof StartSkillRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/api/auth/logout': {
@@ -177,6 +217,8 @@ declare module '@tanstack/react-router' {
 
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
+  StartSkillRoute: StartSkillRoute,
+  StartIndexRoute: StartIndexRoute,
   ApiAuthLogoutRoute: ApiAuthLogoutRoute,
   ApiWebhooksGithubRoute: ApiWebhooksGithubRoute,
   ApiAuthGithubCallbackRoute: ApiAuthGithubCallbackRoute,
