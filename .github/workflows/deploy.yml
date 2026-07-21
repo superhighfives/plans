@@ -15,7 +15,10 @@ on:
   workflow_dispatch:
 
 concurrency:
-  group: deploy-${{ github.ref }}
+  # One production target, so serialize ALL deploys regardless of trigger or
+  # branch — a per-ref group would let a manual dispatch from a feature branch
+  # race the automatic main deploy against the same Worker.
+  group: deploy-production
   cancel-in-progress: false # never abort a half-finished deploy/migration
 
 permissions:
