@@ -12,7 +12,7 @@ the two share one source of truth for the lifecycle. See
 
 This repo currently implements **Phase 0 (foundations)** and **Phase 1 (the
 read-only reader)**. Editing, AI moves, and Flue chat are later phases — see the
-[plan](plans/ready/planning-cms.md).
+[plan](plans/ready/plans-cms.md).
 
 ## What works today
 

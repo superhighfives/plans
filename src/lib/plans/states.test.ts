@@ -7,9 +7,9 @@ describe('parsePlanPath', () => {
       state: 'backlog',
       slug: 'idea',
     })
-    expect(parsePlanPath('plans/ready/planning-cms.md')).toEqual({
+    expect(parsePlanPath('plans/ready/plans-cms.md')).toEqual({
       state: 'ready',
-      slug: 'planning-cms',
+      slug: 'plans-cms',
     })
     expect(parsePlanPath('plans/in-progress/thing.md')).toEqual({
       state: 'in-progress',

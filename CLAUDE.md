@@ -2,7 +2,7 @@
 
 Plans — a TanStack Start app on Cloudflare Workers that reads (and, in
 later phases, writes) the `plans/` directories across a user's GitHub repos.
-See `README.md` for setup and `plans/ready/planning-cms.md` for the full plan.
+See `README.md` for setup and `plans/ready/plans-cms.md` for the full plan.
 
 ## Commands
 
