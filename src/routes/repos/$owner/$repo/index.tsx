@@ -1,9 +1,64 @@
 import { createFileRoute, Link, useRouter } from '@tanstack/react-router'
 import { useServerFn } from '@tanstack/react-start'
 import { useState } from 'react'
-import { PLAN_STATE_LABELS, PLAN_STATES } from '~/lib/plans/states'
-import type { PlanSummary, RepoPlans } from '~/lib/plans/types'
+import type { PlanChange } from '~/lib/plans/diff'
+import {
+  PLAN_STATE_LABELS,
+  PLAN_STATES,
+  type PlanState,
+} from '~/lib/plans/states'
+import type {
+  PlanSummary,
+  PullRequestActivity,
+  RepoPlans,
+} from '~/lib/plans/types'
 import { getRepoPlans, refreshRepoPlans } from '~/server/repo.functions'
+
+/** A plan heading into a column on a branch (a new plan or a state move). */
+interface GhostCard {
+  pr: PullRequestActivity
+  change: PlanChange
+}
+
+/** A branch touching an existing plan in place (modified or removed). */
+interface CardBadge {
+  pr: PullRequestActivity
+  kind: PlanChange['kind']
+}
+
+/**
+ * Fold open-PR activity into per-column ghost cards (added/moved plans land in
+ * their destination state) and per-plan badges (modified/removed plans annotate
+ * the existing card, keyed by slug).
+ */
+function indexBranchActivity(activity: PullRequestActivity[]): {
+  ghostsByState: Record<PlanState, GhostCard[]>
+  badgesBySlug: Map<string, CardBadge[]>
+} {
+  const ghostsByState = {
+    backlog: [],
+    ready: [],
+    'in-progress': [],
+    done: [],
+  } as Record<PlanState, GhostCard[]>
+  const badgesBySlug = new Map<string, CardBadge[]>()
+
+  for (const pr of activity) {
+    for (const change of pr.changes) {
+      if (
+        (change.kind === 'added' || change.kind === 'moved') &&
+        change.headState
+      ) {
+        ghostsByState[change.headState].push({ pr, change })
+      } else if (change.kind === 'modified' || change.kind === 'removed') {
+        const list = badgesBySlug.get(change.slug) ?? []
+        list.push({ pr, kind: change.kind })
+        badgesBySlug.set(change.slug, list)
+      }
+    }
+  }
+  return { ghostsByState, badgesBySlug }
+}
 
 export const Route = createFileRoute('/repos/$owner/$repo/')({
   loader: ({ params }): Promise<RepoPlans> =>
@@ -26,6 +81,10 @@ function RepoPage() {
   const refreshing = busy || revalidating
 
   const total = PLAN_STATES.reduce((n, s) => n + data.states[s].length, 0)
+  const { ghostsByState, badgesBySlug } = indexBranchActivity(
+    data.branchActivity,
+  )
+  const activePrs = data.branchActivity.length
 
   async function onRefresh() {
     setBusy(true)
@@ -48,6 +107,9 @@ function RepoPage() {
           <p className="muted">
             {total} plan{total === 1 ? '' : 's'}
             {data.repo.isPrivate ? ' · private' : ''}
+            {activePrs > 0
+              ? ` · ${activePrs} open PR${activePrs === 1 ? '' : 's'} touching plans`
+              : ''}
           </p>
         </div>
         <button
@@ -68,6 +130,21 @@ function RepoPage() {
         </p>
       ) : null}
 
+      {data.branchActivityStatus === 'no-access' ? (
+        <p className="notice">
+          To show what open PRs are doing to these plans, the Plans GitHub App
+          needs <strong>Pull requests: Read</strong> access.{' '}
+          <a
+            href="https://github.com/settings/installations"
+            target="_blank"
+            rel="noreferrer"
+          >
+            Review the app’s permissions
+          </a>{' '}
+          and accept the update.
+        </p>
+      ) : null}
+
       {total === 0 ? (
         <div className="empty">
           <h2>No plans found</h2>
@@ -85,6 +162,8 @@ function RepoPage() {
               plans={data.states[state]}
               owner={owner}
               repo={repo}
+              ghosts={ghostsByState[state]}
+              badgesBySlug={badgesBySlug}
               // Done can be long and is history — collapse to the most recent.
               initialLimit={state === 'done' ? 5 : undefined}
             />
@@ -100,12 +179,18 @@ function StateColumn({
   plans,
   owner,
   repo,
+  ghosts,
+  badgesBySlug,
   initialLimit,
 }: {
   label: string
   plans: PlanSummary[]
   owner: string
   repo: string
+  /** Added/moved plans headed into this column on a branch. */
+  ghosts: GhostCard[]
+  /** Modified/removed annotations for existing cards, keyed by plan slug. */
+  badgesBySlug: Map<string, CardBadge[]>
   /** If set, show only this many plans until "Show more" is clicked. */
   initialLimit?: number
 }) {
@@ -121,10 +206,15 @@ function StateColumn({
         <h2>{label}</h2>
         <span className="count">{plans.length}</span>
       </div>
-      {plans.length === 0 ? (
+      {plans.length === 0 && ghosts.length === 0 ? (
         <p className="board__empty">Empty</p>
       ) : (
         <ul className="plan-list">
+          {ghosts.map((ghost) => (
+            <li key={`ghost:${ghost.pr.number}:${ghost.change.slug}`}>
+              <GhostCardItem ghost={ghost} />
+            </li>
+          ))}
           {visible.map((plan) => (
             <li key={plan.path}>
               <Link
@@ -136,6 +226,7 @@ function StateColumn({
                 {plan.status ? (
                   <span className="plan-card__status">{plan.status}</span>
                 ) : null}
+                <PlanCardBadges badges={badgesBySlug.get(plan.slug)} />
               </Link>
             </li>
           ))}
@@ -151,6 +242,48 @@ function StateColumn({
         </button>
       ) : null}
     </div>
+  )
+}
+
+function GhostCardItem({ ghost }: { ghost: GhostCard }) {
+  const { pr, change } = ghost
+  const hint =
+    change.kind === 'added'
+      ? 'New plan'
+      : change.baseState
+        ? `from ${PLAN_STATE_LABELS[change.baseState]}`
+        : 'Moved'
+  return (
+    <a
+      className="ghost-card"
+      href={pr.url}
+      target="_blank"
+      rel="noreferrer"
+      title={`${pr.title} — PR #${pr.number}`}
+    >
+      <span className="ghost-card__title">{change.slug}</span>
+      <span className="ghost-card__meta">
+        {hint} · #{pr.number}
+        {pr.draft ? ' · draft' : ''}
+      </span>
+    </a>
+  )
+}
+
+function PlanCardBadges({ badges }: { badges: CardBadge[] | undefined }) {
+  if (!badges || badges.length === 0) return null
+  return (
+    <span className="plan-card__badges">
+      {badges.map((badge) => (
+        <span
+          key={`${badge.pr.number}:${badge.kind}`}
+          className={`pr-badge pr-badge--${badge.kind}`}
+          title={`${badge.kind === 'removed' ? 'Removed' : 'Modified'} in “${badge.pr.title}” (PR #${badge.pr.number})`}
+        >
+          {badge.kind === 'removed' ? '−' : '±'} #{badge.pr.number}
+        </span>
+      ))}
+    </span>
   )
 }
 

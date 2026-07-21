@@ -5,19 +5,24 @@ import { installations, planCache, repos } from '~/db/schema'
 import type { AppEnv } from '~/env'
 import { newId } from '~/lib/crypto'
 import { getInstallationToken } from '~/lib/github/app'
+import { GitHubError } from '~/lib/github/client'
 import {
   fetchBlobText,
   fetchContentFile,
+  listOpenPullRequests,
   listPlanTree,
 } from '~/lib/github/plans'
+import { diffPlanTrees, type PlanEntry } from '~/lib/plans/diff'
 import {
   isValidPlanFrontmatter,
   parseFrontmatter,
 } from '~/lib/plans/frontmatter'
 import { PLAN_STATES, type PlanState, parsePlanPath } from '~/lib/plans/states'
 import type {
+  BranchActivityStatus,
   PlanDetail,
   PlanSummary,
+  PullRequestActivity,
   RepoPlans,
   RepoRef,
 } from '~/lib/plans/types'
@@ -227,7 +232,76 @@ export async function loadRepoPlans(
     )
   }
 
-  return { repo: toRepoRef(repo), states, truncated: tree.truncated }
+  const { activity, status } = await loadBranchActivity(
+    token,
+    repo.owner,
+    repo.name,
+    tree.entries,
+  )
+
+  return {
+    repo: toRepoRef(repo),
+    states,
+    truncated: tree.truncated,
+    branchActivity: activity,
+    branchActivityStatus: status,
+  }
+}
+
+/**
+ * Diff each open PR's plan tree against the default branch to find plans that
+ * are added / moved between states / modified / removed on a branch. Best-effort:
+ * a missing `pull_requests: read` scope (403) degrades to a "no-access" status
+ * so the board can prompt for it; any other error just yields empty activity so
+ * the board never fails to render. Per-PR tree fetches run in parallel and a
+ * single failing PR (e.g. a fork we can't read) is skipped, not fatal.
+ */
+async function loadBranchActivity(
+  token: string,
+  owner: string,
+  repo: string,
+  baseEntries: PlanEntry[],
+): Promise<{ activity: PullRequestActivity[]; status: BranchActivityStatus }> {
+  let pulls: Awaited<ReturnType<typeof listOpenPullRequests>>
+  try {
+    pulls = await listOpenPullRequests(token, owner, repo)
+  } catch (err) {
+    if (
+      err instanceof GitHubError &&
+      (err.status === 403 || err.status === 404)
+    )
+      return { activity: [], status: 'no-access' }
+    return { activity: [], status: 'ok' }
+  }
+
+  const activity = await Promise.all(
+    pulls.map(async (pr): Promise<PullRequestActivity | null> => {
+      try {
+        const headTree = await listPlanTree(token, owner, repo, pr.headSha)
+        const changes = diffPlanTrees(baseEntries, headTree.entries)
+        if (changes.length === 0) return null
+        return {
+          number: pr.number,
+          title: pr.title,
+          authorLogin: pr.authorLogin,
+          url: pr.url,
+          draft: pr.draft,
+          headRef: pr.headRef,
+          updatedAt: pr.updatedAt,
+          changes,
+        }
+      } catch {
+        return null
+      }
+    }),
+  )
+
+  return {
+    activity: activity
+      .filter((a): a is PullRequestActivity => a !== null)
+      .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt)),
+    status: 'ok',
+  }
 }
 
 /**

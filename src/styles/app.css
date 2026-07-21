@@ -443,6 +443,71 @@ form {
   margin-top: 3px;
 }
 
+/* PR badges on an existing plan card (modified / removed in place on a branch) */
+.plan-card__badges {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-top: 8px;
+}
+.pr-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  font-size: 11px;
+  font-weight: 550;
+  padding: 1px 7px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: var(--panel-2);
+  color: var(--muted);
+  white-space: nowrap;
+}
+.pr-badge--modified {
+  color: var(--state-in-progress);
+  border-color: color-mix(in srgb, var(--state-in-progress) 40%, var(--border));
+}
+.pr-badge--removed {
+  color: var(--warn-text);
+  border-color: color-mix(in srgb, var(--warn-text) 35%, var(--border));
+}
+
+/* Ghost card: a plan headed into this column on a branch (added / state move) */
+.ghost-card {
+  display: block;
+  background: transparent;
+  border: 1px dashed color-mix(in srgb, var(--accent) 45%, var(--border));
+  border-radius: var(--radius-sm);
+  padding: 10px 12px;
+  color: var(--text);
+  opacity: 0.85;
+  transition:
+    opacity 0.15s ease,
+    border-color 0.15s ease;
+}
+.ghost-card:hover {
+  text-decoration: none;
+  opacity: 1;
+  border-color: var(--accent);
+}
+.ghost-card__title {
+  display: block;
+  font-weight: 550;
+  font-size: 14px;
+  color: var(--muted);
+}
+.ghost-card:hover .ghost-card__title {
+  color: var(--text);
+}
+.ghost-card__meta {
+  display: block;
+  font-size: 11px;
+  margin-top: 3px;
+  color: color-mix(in srgb, var(--accent) 70%, var(--muted));
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+}
+
 /* Empty / notice states */
 .empty {
   text-align: center;
