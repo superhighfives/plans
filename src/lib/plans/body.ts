@@ -31,7 +31,8 @@ export function stripRedundantHeading(body: string, title: string): string {
 
   const heading = (lines[i] ?? '').match(H1_RE)
   if (!heading) return body
-  if (normalizeHeading(heading[1] ?? '') !== normalizeHeading(title)) return body
+  if (normalizeHeading(heading[1] ?? '') !== normalizeHeading(title))
+    return body
 
   i++ // drop the heading line
   while (i < lines.length && (lines[i] ?? '').trim() === '') i++

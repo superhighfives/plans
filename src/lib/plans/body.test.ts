@@ -26,11 +26,10 @@ describe('stripRedundantHeading', () => {
   })
 
   it('matches when the H1 has inline markdown the title lacks (backticks)', () => {
-    const body =
-      '# One-command bootstrap (`/start`)\n\n## Goal\n\nGo.'
-    expect(
-      stripRedundantHeading(body, 'One-command bootstrap (/start)'),
-    ).toBe('## Goal\n\nGo.')
+    const body = '# One-command bootstrap (`/start`)\n\n## Goal\n\nGo.'
+    expect(stripRedundantHeading(body, 'One-command bootstrap (/start)')).toBe(
+      '## Goal\n\nGo.',
+    )
   })
 
   it('matches the title case-insensitively and ignores surrounding blank lines', () => {
