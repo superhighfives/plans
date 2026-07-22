@@ -5,8 +5,6 @@ created: 2026-07-19
 updated: 2026-07-19
 ---
 
-# Planning CMS
-
 ## Goal
 
 A multi-tenant web app on Cloudflare that reads the `plans/` directories across a user's GitHub repos (the ones that use the [`plans`](../../skills/plans/SKILL.md) skill) and lets them browse, edit, move, and converse with each repo's plans — with AI assistance and every change written back as a git commit. Built product-shaped, shipped in thin phases starting with a read-only reader.
