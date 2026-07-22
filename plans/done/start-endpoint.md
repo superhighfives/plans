@@ -5,8 +5,6 @@ created: 2026-07-21
 updated: 2026-07-21
 ---
 
-# One-command repo bootstrap (`/start`)
-
 ## Goal
 
 Let anyone (a human in a terminal, or an agent) turn a fresh repo into a
