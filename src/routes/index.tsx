@@ -1,4 +1,9 @@
-import { createFileRoute, Link, useRouter } from '@tanstack/react-router'
+import {
+  createFileRoute,
+  Link,
+  useRouter,
+  useRouterState,
+} from '@tanstack/react-router'
 import { useServerFn } from '@tanstack/react-start'
 import { useState } from 'react'
 import { getCurrentUser } from '~/server/auth.functions'
@@ -54,6 +59,25 @@ function DashboardView({ dashboard }: { dashboard: Dashboard }) {
   // revalidation after staleTime, or an explicit rescan).
   const revalidating = Route.useMatch({ select: (m) => Boolean(m.isFetching) })
   const scanning = busy || revalidating
+
+  // The pathname currently being navigated to, if any. `location` optimistically
+  // holds the target while `status` is 'pending', so this reflects the single
+  // in-flight navigation — clicking a second row before the first loads moves the
+  // spinner to the second row automatically.
+  const pendingPath = useRouterState({
+    select: (s) => {
+      if (s.status !== 'pending') return null
+      const raw = s.location.pathname
+      const decoded = (() => {
+        try {
+          return decodeURIComponent(raw)
+        } catch {
+          return raw
+        }
+      })()
+      return decoded.replace(/\/+$/, '') || '/'
+    },
+  })
 
   async function onRefresh() {
     setBusy(true)
@@ -122,20 +146,36 @@ function DashboardView({ dashboard }: { dashboard: Dashboard }) {
               </p>
             ) : (
               <ul className="repo-list">
-                {inst.repos.map((repo) => (
-                  <li key={repo.fullName}>
-                    <Link
-                      to="/repos/$owner/$repo"
-                      params={{ owner: repo.owner, repo: repo.name }}
-                      className="repo-list__item"
-                    >
-                      <span className="repo-list__name">{repo.fullName}</span>
-                      {repo.isPrivate ? (
-                        <span className="tag">Private</span>
-                      ) : null}
-                    </Link>
-                  </li>
-                ))}
+                {inst.repos.map((repo) => {
+                  const loading =
+                    pendingPath === `/repos/${repo.owner}/${repo.name}`
+                  return (
+                    <li key={repo.fullName}>
+                      <Link
+                        to="/repos/$owner/$repo"
+                        params={{ owner: repo.owner, repo: repo.name }}
+                        className={`repo-list__item${loading ? ' repo-list__item--loading' : ''}`}
+                        aria-busy={loading}
+                        aria-disabled={loading}
+                        // Prevent re-triggering the in-flight nav; other rows
+                        // stay clickable and take over the spinner.
+                        onClick={(e) => {
+                          if (loading) e.preventDefault()
+                        }}
+                      >
+                        <span className="repo-list__name">{repo.fullName}</span>
+                        <span className="repo-list__right">
+                          {loading ? (
+                            <span className="spinner" aria-hidden />
+                          ) : null}
+                          {repo.isPrivate ? (
+                            <span className="tag">Private</span>
+                          ) : null}
+                        </span>
+                      </Link>
+                    </li>
+                  )
+                })}
               </ul>
             )}
           </div>

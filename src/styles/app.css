@@ -334,8 +334,19 @@ form {
   text-decoration: none;
   border-color: var(--accent);
 }
+.repo-list__item--loading {
+  pointer-events: none;
+  opacity: 0.65;
+  border-color: var(--accent);
+}
 .repo-list__name {
   font-weight: 550;
+}
+.repo-list__right {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  color: var(--muted);
 }
 
 /* Board */
