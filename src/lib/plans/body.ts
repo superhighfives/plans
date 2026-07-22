@@ -13,10 +13,16 @@ const META_LINE_RE =
 /** Match an ATX H1 (`# Heading`, with optional trailing `#`s), capturing the text. */
 const H1_RE = /^#\s+(.*?)\s*#*\s*$/
 
+/** Normalize a heading/title for comparison: drop inline markdown (`, *, _) and case. */
+function normalizeHeading(s: string): string {
+  return s.replace(/[`*_]/g, '').trim().toLowerCase()
+}
+
 /**
  * Remove a leading H1 that matches `title` (trimmed, case-insensitive), and — only
- * when such a heading was removed — an immediately-following metadata line. Returns
- * the body unchanged when the first heading isn't a title duplicate.
+ * when such a heading was removed — any immediately-following metadata lines (e.g.
+ * a `**Date**:` line and a `**Status**:` line, which some plans emit separately).
+ * Returns the body unchanged when the first heading isn't a title duplicate.
  */
 export function stripRedundantHeading(body: string, title: string): string {
   const lines = body.split('\n')
@@ -25,12 +31,11 @@ export function stripRedundantHeading(body: string, title: string): string {
 
   const heading = (lines[i] ?? '').match(H1_RE)
   if (!heading) return body
-  if ((heading[1] ?? '').trim().toLowerCase() !== title.trim().toLowerCase())
-    return body
+  if (normalizeHeading(heading[1] ?? '') !== normalizeHeading(title)) return body
 
   i++ // drop the heading line
   while (i < lines.length && (lines[i] ?? '').trim() === '') i++
-  if (i < lines.length && META_LINE_RE.test(lines[i] ?? '')) i++ // drop one meta line
+  while (i < lines.length && META_LINE_RE.test(lines[i] ?? '')) i++ // drop meta lines
 
   return lines.slice(i).join('\n').replace(/^\n+/, '')
 }

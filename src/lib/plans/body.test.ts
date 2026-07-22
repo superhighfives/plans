@@ -17,6 +17,22 @@ describe('stripRedundantHeading', () => {
     )
   })
 
+  it('drops multiple consecutive metadata lines (Date + Status on separate lines)', () => {
+    const body =
+      '# Suggestive Enrich\n\n**Date**: 2026-07-19\n**Status**: Ready\n\n## Goal\n\nBody.'
+    expect(stripRedundantHeading(body, 'Suggestive Enrich')).toBe(
+      '## Goal\n\nBody.',
+    )
+  })
+
+  it('matches when the H1 has inline markdown the title lacks (backticks)', () => {
+    const body =
+      '# One-command bootstrap (`/start`)\n\n## Goal\n\nGo.'
+    expect(
+      stripRedundantHeading(body, 'One-command bootstrap (/start)'),
+    ).toBe('## Goal\n\nGo.')
+  })
+
   it('matches the title case-insensitively and ignores surrounding blank lines', () => {
     const body = '\n\n#   suggestive enrich  \n\nContent.'
     expect(stripRedundantHeading(body, 'Suggestive Enrich')).toBe('Content.')
