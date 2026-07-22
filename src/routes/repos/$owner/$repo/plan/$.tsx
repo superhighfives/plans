@@ -2,6 +2,7 @@ import { createFileRoute, Link } from '@tanstack/react-router'
 import { useState } from 'react'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
+import { stripRedundantHeading } from '~/lib/plans/body'
 import { PLAN_STATE_LABELS } from '~/lib/plans/states'
 import type { UnifiedDiff } from '~/lib/plans/text-diff'
 import type { PlanBranchTab, PlanView } from '~/lib/plans/types'
@@ -36,6 +37,9 @@ function PlanPage() {
   const { plan, tabs, activePr, diff } = Route.useLoaderData()
   const { owner, repo, _splat } = Route.useParams()
   const hasDiff = diff != null && diff.hunks.length > 0
+  // The header panel already shows the title + state/status/dates, so drop the
+  // body's leading duplicate heading/metadata for display.
+  const displayBody = stripRedundantHeading(plan.body, plan.title)
 
   return (
     <section className="plan">
@@ -100,7 +104,7 @@ function PlanPage() {
       ) : null}
 
       {activePr != null && hasDiff && diff ? (
-        <PlanBody body={plan.body} diff={diff} />
+        <PlanBody body={displayBody} diff={diff} />
       ) : (
         <>
           {activePr != null && diff && !hasDiff ? (
@@ -111,7 +115,7 @@ function PlanPage() {
           ) : null}
           <article className="markdown">
             <ReactMarkdown remarkPlugins={[remarkGfm]}>
-              {plan.body}
+              {displayBody}
             </ReactMarkdown>
           </article>
         </>

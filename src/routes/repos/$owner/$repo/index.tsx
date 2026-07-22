@@ -308,9 +308,10 @@ function PlanCardBadges({ badges }: { badges: CardBadge[] | undefined }) {
         <span
           key={`${badge.pr.number}:${badge.kind}`}
           className={`pr-badge pr-badge--${badge.kind}`}
-          title={`${badge.kind === 'removed' ? 'Removed' : 'Modified'} in “${badge.pr.title}” (PR #${badge.pr.number})`}
+          title={`This plan is ${badge.kind === 'removed' ? 'deleted' : 'edited'} in the open pull request “${badge.pr.title}” (PR #${badge.pr.number})`}
         >
-          {badge.kind === 'removed' ? '−' : '±'} #{badge.pr.number}
+          {badge.kind === 'removed' ? 'Removed in' : 'Edited in'} #
+          {badge.pr.number}
         </span>
       ))}
     </span>
