@@ -25,6 +25,22 @@ describe('stripRedundantHeading', () => {
     )
   })
 
+  it('keeps non-redundant metadata (Scope, Updated) while dropping Date/Status', () => {
+    const body =
+      '# Admin Interface\n\n**Date:** 2026-06-22\n**Status:** Complete\n**Updated:** 2026-07-17\n**Scope:** Standalone admin app\n\n## Problem\n\nX.'
+    expect(stripRedundantHeading(body, 'Admin Interface')).toBe(
+      '**Updated:** 2026-07-17\n**Scope:** Standalone admin app\n\n## Problem\n\nX.',
+    )
+  })
+
+  it('drops Date/Status even when interleaved with kept metadata', () => {
+    const body =
+      '# Research Agent\n\n**Date:** 2026-03-13\n**Updated:** 2026-03-27\n**Status:** Complete\n**Scope:** API + Web\n\n## Overview\n\nY.'
+    expect(stripRedundantHeading(body, 'Research Agent')).toBe(
+      '**Updated:** 2026-03-27\n**Scope:** API + Web\n\n## Overview\n\nY.',
+    )
+  })
+
   it('matches when the H1 has inline markdown the title lacks (backticks)', () => {
     const body = '# One-command bootstrap (`/start`)\n\n## Goal\n\nGo.'
     expect(stripRedundantHeading(body, 'One-command bootstrap (/start)')).toBe(
