@@ -108,8 +108,8 @@ Secrets (installation tokens, any cached credentials) encrypted at rest with a k
 
 - [x] **Phase 0:** new repo; TanStack Start on Workers; D1 + Drizzle; register GitHub App; user-OAuth login; installation linking; encrypted token storage.
 - [x] **Phase 1 (v1):** installation + repo listing; `plans/` auto-detection via scan + cache; repo view (four state lists); plan renderer (frontmatter + markdown); manual refresh; `push` webhook invalidation. *(Discovery runs inline in v1; Queue fan-out is a follow-up — see README.)*
-- [ ] **Phase 2:** markdown editor; App-authored direct-commit write path; base-SHA conflict handling; templated commit messages; audit log.
-- [ ] **Phase 3:** explicit move control + context textarea; Claude move/update prompts per transition; open-questions warn-and-override; rich preview/diff; atomic move-and-update commit; frontmatter auto-update.
+- [x] **Phase 2:** raw-markdown editor on the plan view; App-authored direct-commit write path (Contents API PUT — one atomic commit per edit; the Git Data API is reserved for Phase 3 moves, which touch two paths); base-SHA conflict handling (stale sha → conflict, no clobber); templated commit message (`plans: update <title>`); cache refresh + audit-log row on success.
+- [x] **Phase 3:** explicit move control + context textarea; Claude (`claude-opus-4-8`) move/update prompts per transition, run through **Cloudflare AI Gateway** (unified billing); open-questions warn-and-override when promoting to `ready`; rich preview/diff; atomic move-and-update commit via the Git Data API (blob→tree→commit→ref, non-forced), base-SHA guarded; frontmatter `status` + `updated` set deterministically server-side (the model only rewrites the body).
 - [ ] **Phase 4:** new-backlog-item flow with AI fleshing-out and preview.
 - [ ] **Phase 5:** Flue agent in a sandbox with ephemeral clone; Durable Object session persistence; agentic edits through the preview path; Workflows for long runs.
 - [ ] **Phase 6:** AI quotas + rate limits; org/team support; audit UI; polish.

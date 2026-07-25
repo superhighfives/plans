@@ -97,9 +97,17 @@ function DashboardView({ dashboard }: { dashboard: Dashboard }) {
           <p className="muted">
             {dashboard.reposWithPlans} repo
             {dashboard.reposWithPlans === 1 ? '' : 's'} with plans
-            {dashboard.lastScannedAt
-              ? ` · scanned ${formatWhen(dashboard.lastScannedAt)}`
-              : ''}
+            {dashboard.lastScannedAt ? (
+              <>
+                {' · scanned '}
+                {/* Relative time is computed from the current clock, so the
+                    server and client renders differ by the request latency —
+                    an expected, benign hydration divergence. */}
+                <span suppressHydrationWarning>
+                  {formatWhen(dashboard.lastScannedAt)}
+                </span>
+              </>
+            ) : null}
           </p>
         </div>
         <button

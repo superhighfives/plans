@@ -127,7 +127,7 @@ export async function fetchContentFile(
   return { sha: res.sha, text }
 }
 
-function encodePath(path: string): string {
+export function encodePath(path: string): string {
   return path
     .split('/')
     .map((seg) => encodeURIComponent(seg))

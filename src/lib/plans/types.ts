@@ -22,6 +22,25 @@ export interface PlanDetail extends PlanSummary {
   body: string
 }
 
+/** An AI-drafted state move, awaiting the user's approval before it's committed. */
+export interface PlanMovePreview {
+  title: string
+  fromState: PlanState
+  toState: PlanState
+  /** Current path (source state). */
+  oldPath: string
+  /** Path the plan moves to (target state, same slug). */
+  newPath: string
+  /** Full proposed file (frontmatter + body) to commit at newPath. */
+  newContent: string
+  /** Blob sha the source file was read at — the conflict guard on commit. */
+  baseSha: string
+  /** Unified diff of the whole file, current → proposed. */
+  diff: UnifiedDiff
+  /** Unresolved-question warnings (populated when promoting to `ready`). */
+  warnings: string[]
+}
+
 /** One selectable ref for a plan in the detail view: the default branch or a PR. */
 export interface PlanBranchTab {
   kind: 'default' | 'pr'
