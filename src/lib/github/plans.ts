@@ -1,6 +1,6 @@
 import { fromBase64 } from '~/lib/crypto'
 import { isPlanPath } from '~/lib/plans/states'
-import { githubPaginate, githubRequest } from './client'
+import { GitHubError, githubPaginate, githubRequest } from './client'
 
 interface TreeResponse {
   sha: string
@@ -107,6 +107,10 @@ interface ContentFileResponse {
 /**
  * Fetch a single file via the Contents API on a given ref. Used when a plan is
  * opened directly (no prior tree scan), so we get the latest content + sha.
+ *
+ * Returns null when the path doesn't exist (GitHub answers a missing path with a
+ * 404) as well as when it resolves to a non-file — callers treat "absent" and
+ * "not a file" the same. Any other error (403, 5xx, …) propagates.
  */
 export async function fetchContentFile(
   token: string,
@@ -115,10 +119,16 @@ export async function fetchContentFile(
   path: string,
   ref: string,
 ): Promise<{ sha: string; text: string } | null> {
-  const res = await githubRequest<ContentFileResponse>(
-    `/repos/${owner}/${repo}/contents/${encodePath(path)}?ref=${encodeURIComponent(ref)}`,
-    { token },
-  )
+  let res: ContentFileResponse
+  try {
+    res = await githubRequest<ContentFileResponse>(
+      `/repos/${owner}/${repo}/contents/${encodePath(path)}?ref=${encodeURIComponent(ref)}`,
+      { token },
+    )
+  } catch (err) {
+    if (err instanceof GitHubError && err.status === 404) return null
+    throw err
+  }
   if (res.type !== 'file' || res.content == null) return null
   const text =
     res.encoding === 'base64'
