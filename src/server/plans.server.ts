@@ -23,10 +23,10 @@ import {
   serializeFrontmatter,
 } from '~/lib/plans/frontmatter'
 import {
-  PLAN_STATE_DEFS,
   PLAN_STATES,
   type PlanState,
   parsePlanPath,
+  planStateDef,
 } from '~/lib/plans/states'
 import { unifiedDiff } from '~/lib/plans/text-diff'
 import type {
@@ -547,12 +547,6 @@ export async function writePlan(
   }
 }
 
-function stateDef(state: PlanState) {
-  const def = PLAN_STATE_DEFS.find((s) => s.id === state)
-  if (!def) throw new Error(`Unknown plan state: ${state}`)
-  return def
-}
-
 function todayIso(): string {
   return new Date().toISOString().slice(0, 10)
 }
@@ -591,10 +585,27 @@ export async function proposePlanMove(
   const newBody = await completeText(env, { system, prompt })
 
   const newContent = serializeFrontmatter(
-    { ...parsed.data, status: stateDef(toState).status, updated: todayIso() },
+    {
+      ...parsed.data,
+      status: planStateDef(toState).status,
+      updated: todayIso(),
+    },
     newBody,
   )
   const newPath = `plans/${toState}/${info.slug}.md`
+
+  // Slugs aren't unique across state directories, so the destination path can
+  // already hold a *different* plan. Surface that here so the preview can warn —
+  // committing would otherwise overwrite it. commitPlanMove re-checks and blocks.
+  const { repo, installation } = ctx
+  const token = await getInstallationToken(db, env, installation)
+  const destination = await fetchContentFile(
+    token,
+    repo.owner,
+    repo.name,
+    newPath,
+    repo.defaultBranch,
+  )
 
   return {
     title,
@@ -606,6 +617,7 @@ export async function proposePlanMove(
     baseSha: source.sha,
     diff: unifiedDiff(source.content, newContent),
     warnings: toState === 'ready' ? findOpenQuestions(newBody) : [],
+    destinationExists: destination !== null,
   }
 }
 
@@ -613,6 +625,8 @@ export type MovePlanResult =
   | { ok: true; newPath: string; commitSha: string }
   /** The source file changed on GitHub since the preview was drafted. */
   | { ok: false; reason: 'conflict' }
+  /** A different plan already occupies the destination path — refused to clobber it. */
+  | { ok: false; reason: 'destination-exists' }
 
 /**
  * Commit an approved move as one atomic commit (delete old path + write new
@@ -649,6 +663,16 @@ export async function commitPlanMove(
   if (!current || current.sha !== input.baseSha)
     return { ok: false, reason: 'conflict' }
 
+  // Never overwrite a different plan already sitting at the destination path.
+  const occupant = await fetchContentFile(
+    token,
+    repo.owner,
+    repo.name,
+    input.newPath,
+    repo.defaultBranch,
+  )
+  if (occupant) return { ok: false, reason: 'destination-exists' }
+
   const parsed = parseFrontmatter(input.newContent)
   if (!isValidPlanFrontmatter(parsed.data))
     throw new Error('Proposed plan is missing a title')
@@ -660,7 +684,7 @@ export async function commitPlanMove(
     repo.name,
     repo.defaultBranch,
     {
-      message: `plans: move ${title} to ${stateDef(newInfo.state).label}`,
+      message: `plans: move ${title} to ${planStateDef(newInfo.state).label}`,
       changes: [
         { path: input.oldPath, content: null },
         { path: input.newPath, content: input.newContent },

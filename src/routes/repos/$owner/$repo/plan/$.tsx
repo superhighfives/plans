@@ -238,7 +238,9 @@ function PlanMoveControl({
         return
       }
       setError(
-        'This plan changed on GitHub since the move was drafted. Discard and draft again.',
+        result.reason === 'destination-exists'
+          ? `A different plan already exists at ${preview.newPath}. Rename or remove it before moving this one there.`
+          : 'This plan changed on GitHub since the move was drafted. Discard and draft again.',
       )
     } catch {
       setError("Couldn't commit the move — try again.")
@@ -254,6 +256,13 @@ function PlanMoveControl({
         <h2 className="move__title">
           Move to {PLAN_STATE_LABELS[preview.toState]} — preview
         </h2>
+        {preview.destinationExists ? (
+          <div className="move__warn move__warn--block">
+            <strong>A plan already exists at {preview.newPath}.</strong> Moving
+            this one there would overwrite it, so it's blocked. Rename or remove
+            the existing plan first.
+          </div>
+        ) : null}
         {preview.warnings.length > 0 ? (
           <div className="move__warn">
             <strong>Open questions remain</strong> — you can still move it, but
@@ -278,7 +287,7 @@ function PlanMoveControl({
             type="button"
             className="btn"
             onClick={approve}
-            disabled={committing}
+            disabled={committing || preview.destinationExists}
           >
             {committing ? 'Committing…' : 'Approve & commit'}
           </button>

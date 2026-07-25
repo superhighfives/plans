@@ -1,10 +1,4 @@
-import { PLAN_STATE_DEFS, type PlanState } from '~/lib/plans/states'
-
-function stateDef(state: PlanState) {
-  const def = PLAN_STATE_DEFS.find((s) => s.id === state)
-  if (!def) throw new Error(`Unknown plan state: ${state}`)
-  return def
-}
+import { type PlanState, planStateDef } from '~/lib/plans/states'
 
 const SYSTEM = `You are a meticulous engineering planner maintaining a repository's implementation specs.
 
@@ -48,7 +42,7 @@ The concrete changes — components, files, decisions — grounded in the plan a
 If the plan's original tasks are now complete, mark them done.`
     default:
       // Backward moves (e.g. ready → backlog) and any less common transition.
-      return `Adjust the plan to suit its new state — "${stateDef(to).label}: ${stateDef(to).description}". Moving backward means condensing toward that state's level of detail rather than adding to it. Preserve the author's decisions; don't discard real content.`
+      return `Adjust the plan to suit its new state — "${planStateDef(to).label}: ${planStateDef(to).description}". Moving backward means condensing toward that state's level of detail rather than adding to it. Preserve the author's decisions; don't discard real content.`
   }
 }
 
@@ -68,7 +62,7 @@ export function buildMovePrompt(opts: {
   const { title, fromState, toState, body, context } = opts
   const prompt = [
     `Plan title: ${title}`,
-    `Moving from "${stateDef(fromState).label}" to "${stateDef(toState).label}".`,
+    `Moving from "${planStateDef(fromState).label}" to "${planStateDef(toState).label}".`,
     '',
     transitionGuidance(fromState, toState),
     '',

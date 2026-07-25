@@ -39,6 +39,8 @@ export interface PlanMovePreview {
   diff: UnifiedDiff
   /** Unresolved-question warnings (populated when promoting to `ready`). */
   warnings: string[]
+  /** A different plan already sits at `newPath` — committing would overwrite it. */
+  destinationExists: boolean
 }
 
 /** One selectable ref for a plan in the detail view: the default branch or a PR. */

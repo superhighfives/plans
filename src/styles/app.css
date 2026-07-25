@@ -648,6 +648,11 @@ form {
   margin: 6px 0 0;
   padding-left: 18px;
 }
+/* A hard block (destination occupied) reads as an error, not a soft warning. */
+.move__warn--block {
+  border-color: #e5484d;
+  background: color-mix(in srgb, #e5484d 8%, transparent);
+}
 .plan-editor__bar {
   display: flex;
   gap: 8px;
