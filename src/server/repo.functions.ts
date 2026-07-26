@@ -2,14 +2,26 @@ import { notFound } from '@tanstack/react-router'
 import { createServerFn } from '@tanstack/react-start'
 import { getDb } from '~/db'
 import { getEnv } from '~/env'
-import { isPlanPath } from '~/lib/plans/states'
-import type { PlanDetail, PlanView, RepoPlans } from '~/lib/plans/types'
+import { isPlanPath, isPlanState, type PlanState } from '~/lib/plans/states'
+import type {
+  PlanDetail,
+  PlanMovePreview,
+  PlanView,
+  RepoPlans,
+} from '~/lib/plans/types'
 import { authMiddleware } from './auth-middleware'
 import {
+  commitPlanMove,
   loadPlanDetail,
+  loadPlanSource,
   loadPlanView,
   loadRepoPlans,
+  type MovePlanResult,
+  type PlanSource,
+  proposePlanMove,
   resolveAccessibleRepo,
+  type WritePlanResult,
+  writePlan,
 } from './plans.server'
 
 interface RepoInput {
@@ -24,6 +36,27 @@ interface PlanInput extends RepoInput {
 interface PlanViewInput extends PlanInput {
   /** Open PR number to view the plan at; omit/null for the default branch. */
   pr: number | null
+}
+
+interface UpdatePlanInput extends PlanInput {
+  /** The full edited file (frontmatter + body) to commit. */
+  content: string
+  /** Blob sha the edit started from — the base-SHA conflict guard. */
+  baseSha: string
+}
+
+interface ProposeMoveInput extends PlanInput {
+  /** The lifecycle state to move the plan into. */
+  toState: PlanState
+  /** Optional extra context to steer the AI rewrite. */
+  context: string
+}
+
+interface CommitMoveInput extends RepoInput {
+  oldPath: string
+  newPath: string
+  newContent: string
+  baseSha: string
 }
 
 function validateRepoInput(data: RepoInput): RepoInput {
@@ -113,4 +146,140 @@ export const getPlanView = createServerFn({ method: 'GET' })
     const view = await loadPlanView(db, getEnv(), ctx, data.path, data.pr)
     if (!view) throw notFound()
     return view
+  })
+
+/** The raw file behind a plan, for the editor. Enforces per-user repo access. */
+export const getPlanSource = createServerFn({ method: 'GET' })
+  .middleware([authMiddleware])
+  .validator((data: PlanInput): PlanInput => {
+    const base = validateRepoInput(data)
+    if (!data?.path || !isPlanPath(data.path)) throw notFound()
+    return { ...base, path: data.path }
+  })
+  .handler(async ({ context, data }): Promise<PlanSource> => {
+    const db = getDb()
+    const ctx = await resolveAccessibleRepo(
+      db,
+      context.user.id,
+      data.owner,
+      data.repo,
+    )
+    if (!ctx) throw notFound()
+    const source = await loadPlanSource(db, getEnv(), ctx, data.path)
+    if (!source) throw notFound()
+    return source
+  })
+
+/**
+ * Commit a hand-edited plan back to the default branch as one App-authored
+ * commit, guarded by the base sha. Returns a discriminated result so the UI can
+ * distinguish a conflict from an invalid edit without throwing.
+ */
+export const updatePlan = createServerFn({ method: 'POST' })
+  .middleware([authMiddleware])
+  .validator((data: UpdatePlanInput): UpdatePlanInput => {
+    const base = validateRepoInput(data)
+    if (!data?.path || !isPlanPath(data.path)) throw notFound()
+    if (typeof data.content !== 'string' || data.content.length === 0)
+      throw new Error('content is required')
+    if (typeof data.baseSha !== 'string' || !data.baseSha)
+      throw new Error('baseSha is required')
+    return {
+      ...base,
+      path: data.path,
+      content: data.content,
+      baseSha: data.baseSha,
+    }
+  })
+  .handler(async ({ context, data }): Promise<WritePlanResult> => {
+    const db = getDb()
+    const ctx = await resolveAccessibleRepo(
+      db,
+      context.user.id,
+      data.owner,
+      data.repo,
+    )
+    if (!ctx) throw notFound()
+    return writePlan(
+      db,
+      getEnv(),
+      ctx,
+      context.user.id,
+      data.path,
+      data.content,
+      data.baseSha,
+    )
+  })
+
+/**
+ * Draft (but don't commit) an AI move of a plan to a new state. Returns a
+ * preview + diff for the user to approve. Enforces per-user repo access.
+ */
+export const proposeMove = createServerFn({ method: 'POST' })
+  .middleware([authMiddleware])
+  .validator((data: ProposeMoveInput): ProposeMoveInput => {
+    const base = validateRepoInput(data)
+    if (!data?.path || !isPlanPath(data.path)) throw notFound()
+    if (!data?.toState || !isPlanState(data.toState))
+      throw new Error('a valid toState is required')
+    return {
+      ...base,
+      path: data.path,
+      toState: data.toState,
+      context: typeof data.context === 'string' ? data.context : '',
+    }
+  })
+  .handler(async ({ context, data }): Promise<PlanMovePreview> => {
+    const db = getDb()
+    const ctx = await resolveAccessibleRepo(
+      db,
+      context.user.id,
+      data.owner,
+      data.repo,
+    )
+    if (!ctx) throw notFound()
+    return proposePlanMove(
+      db,
+      getEnv(),
+      ctx,
+      data.path,
+      data.toState,
+      data.context,
+    )
+  })
+
+/** Commit an approved move as one atomic commit. Enforces per-user repo access. */
+export const commitMove = createServerFn({ method: 'POST' })
+  .middleware([authMiddleware])
+  .validator((data: CommitMoveInput): CommitMoveInput => {
+    const base = validateRepoInput(data)
+    if (!data?.oldPath || !isPlanPath(data.oldPath)) throw notFound()
+    if (!data?.newPath || !isPlanPath(data.newPath)) throw notFound()
+    if (typeof data.newContent !== 'string' || data.newContent.length === 0)
+      throw new Error('newContent is required')
+    if (typeof data.baseSha !== 'string' || !data.baseSha)
+      throw new Error('baseSha is required')
+    return {
+      ...base,
+      oldPath: data.oldPath,
+      newPath: data.newPath,
+      newContent: data.newContent,
+      baseSha: data.baseSha,
+    }
+  })
+  .handler(async ({ context, data }): Promise<MovePlanResult> => {
+    const db = getDb()
+    const ctx = await resolveAccessibleRepo(
+      db,
+      context.user.id,
+      data.owner,
+      data.repo,
+    )
+    if (!ctx) throw notFound()
+    return commitPlanMove(db, getEnv(), ctx, context.user.id, {
+      oldPath: data.oldPath,
+      newPath: data.newPath,
+      newContent: data.newContent,
+      baseSha: data.baseSha,
+    })
   })

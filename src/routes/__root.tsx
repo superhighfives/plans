@@ -6,7 +6,7 @@ import {
   Scripts,
   useRouterState,
 } from '@tanstack/react-router'
-import type { ReactNode } from 'react'
+import { type ReactNode, useEffect, useState } from 'react'
 import { type CurrentUser, getCurrentUser } from '~/server/auth.functions'
 import appCss from '~/styles/app.css?url'
 
@@ -44,11 +44,19 @@ function RouteProgress() {
   const isPending = useRouterState({
     select: (s) => s.status === 'pending',
   })
+  // The router reports `pending` during SSR, so rendering the active bar on the
+  // server would bake the (forwards-filling) animation into the HTML and, on a
+  // hydration attribute mismatch, leave it stuck on screen. Gate activation on a
+  // client mount so the first client render matches the server (both inactive),
+  // then reflect the real navigation status.
+  const [mounted, setMounted] = useState(false)
+  useEffect(() => setMounted(true), [])
+  const active = mounted && isPending
   return (
     <div
-      className={`route-progress${isPending ? ' route-progress--active' : ''}`}
+      className={`route-progress${active ? ' route-progress--active' : ''}`}
       role="progressbar"
-      aria-hidden={!isPending}
+      aria-hidden={!active}
       aria-label="Loading page"
     />
   )

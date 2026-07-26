@@ -63,6 +63,13 @@ export function isPlanState(value: string): value is PlanState {
   return PLAN_STATE_SET.has(value)
 }
 
+/** The definition (label, status, description) for a state id. Throws if unknown. */
+export function planStateDef(state: PlanState): PlanStateDef {
+  const def = PLAN_STATE_DEFS.find((s) => s.id === state)
+  if (!def) throw new Error(`Unknown plan state: ${state}`)
+  return def
+}
+
 /**
  * Matches a top-level plan file: plans/<state>/<file>.md
  *

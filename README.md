@@ -10,8 +10,12 @@ The `plans` skill lives in this repo too — it's the spec this app reads, so
 the two share one source of truth for the lifecycle. See
 [The `plans` skill](#the-plans-skill) below.
 
-This repo currently implements **Phase 0 (foundations)** and **Phase 1 (the
-read-only reader)**. Editing, AI moves, and Flue chat are later phases — see the
+This repo currently implements **Phase 0 (foundations)**, **Phase 1 (the
+read-only reader)**, **Phase 2 (hand editing)**, and **Phase 3 (AI-assisted
+moves)** — plans can be edited and committed back as bot-authored commits, and
+moved between lifecycle states with Claude (via Cloudflare AI Gateway) drafting
+the rewrite, shown as a diff to approve before an atomic move-and-update commit.
+AI-drafted new backlog items and Flue chat are later phases — see the
 [plan](plans/ready/plans-cms.md).
 
 ## What works today

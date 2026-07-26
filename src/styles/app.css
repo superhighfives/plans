@@ -552,10 +552,120 @@ form {
 .plan__head {
   margin-bottom: 24px;
 }
+.plan__title-row {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  margin: 0 0 16px;
+}
+.plan__title-row h1 {
+  margin: 0;
+}
 .plan__head h1 {
   font-size: 30px;
   letter-spacing: -0.015em;
   margin: 0 0 16px;
+}
+
+/* Plan editor: raw-markdown textarea + commit/cancel bar */
+.plan-editor {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.plan-editor__area {
+  width: 100%;
+  min-height: 460px;
+  resize: vertical;
+  padding: 16px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--panel);
+  color: var(--text);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 13px;
+  line-height: 1.6;
+  tab-size: 2;
+}
+.plan-editor__area:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+/* Keep the panel height stable when toggling from editor to a short preview. */
+.plan-editor__preview {
+  min-height: 460px;
+}
+
+/* AI move control (target picker → preview/diff → approve) */
+.move {
+  margin-top: 32px;
+  padding-top: 24px;
+  border-top: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.move__title {
+  font-size: 16px;
+  margin: 0;
+}
+.move__hint {
+  margin: 0;
+  font-size: 13px;
+  color: var(--muted);
+}
+.move__context {
+  width: 100%;
+  min-height: 72px;
+  resize: vertical;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--panel);
+  color: var(--text);
+  font: inherit;
+  font-size: 14px;
+}
+.move__context:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+.move__targets {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.move__warn {
+  padding: 10px 14px;
+  border: 1px solid var(--state-in-progress);
+  border-left-width: 3px;
+  border-radius: var(--radius-sm);
+  background: color-mix(in srgb, var(--state-in-progress) 8%, transparent);
+  font-size: 13px;
+}
+.move__warn ul {
+  margin: 6px 0 0;
+  padding-left: 18px;
+}
+/* A hard block (destination occupied) reads as an error, not a soft warning. */
+.move__warn--block {
+  border-color: #e5484d;
+  background: color-mix(in srgb, #e5484d 8%, transparent);
+}
+.plan-editor__bar {
+  display: flex;
+  gap: 8px;
+}
+.plan-editor__error {
+  margin: 0;
+  padding: 10px 14px;
+  border: 1px solid #e5484d;
+  border-left-width: 3px;
+  border-radius: var(--radius-sm);
+  background: color-mix(in srgb, #e5484d 8%, transparent);
+  color: var(--text);
+  font-size: 13px;
 }
 .plan__meta {
   display: flex;
@@ -599,6 +709,12 @@ form {
   color: var(--muted);
   font-size: 13px;
   font-weight: 550;
+}
+/* The Editor/Preview toggle reuses the pill styling as <button>s, which don't
+   inherit font or cursor the way the <Link> tabs do. */
+button.branch-tab {
+  font: inherit;
+  cursor: pointer;
 }
 .branch-tab:hover {
   text-decoration: none;

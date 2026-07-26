@@ -31,6 +31,17 @@ export interface AppEnv {
 
   /** Public origin of this deployment, e.g. https://plans.example.com (no trailing slash). */
   APP_URL: string
+
+  /** Cloudflare account id that owns the AI Gateway. */
+  CF_AI_GATEWAY_ACCOUNT_ID: string
+  /** The AI Gateway id (its slug) to route Claude calls through. */
+  CF_AI_GATEWAY_ID: string
+  /**
+   * AI Gateway authenticated token (`cf-aig-authorization`). The gateway supplies
+   * the Anthropic credentials — via Unified Billing (Cloudflare-billed credits) or
+   * a stored provider key (BYOK) — so no Anthropic API key lives in this app.
+   */
+  CF_AI_GATEWAY_TOKEN: string
 }
 
 /** Read the typed Worker environment. Per-request only. */

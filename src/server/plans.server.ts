@@ -1,8 +1,10 @@
 import { and, eq, inArray } from 'drizzle-orm'
 import type { Db } from '~/db'
 import type { Installation, PlanCacheRow, Repo } from '~/db/schema'
-import { installations, planCache, repos } from '~/db/schema'
+import { auditLog, installations, planCache, repos } from '~/db/schema'
 import type { AppEnv } from '~/env'
+import { completeText } from '~/lib/ai/gateway'
+import { buildMovePrompt, findOpenQuestions } from '~/lib/ai/plan-prompts'
 import { newId } from '~/lib/crypto'
 import { getInstallationToken } from '~/lib/github/app'
 import { GitHubError } from '~/lib/github/client'
@@ -13,17 +15,25 @@ import {
   listPlanTree,
   type OpenPullRequest,
 } from '~/lib/github/plans'
+import { createCommit, putFile } from '~/lib/github/write'
 import { diffPlanTrees, type PlanEntry } from '~/lib/plans/diff'
 import {
   isValidPlanFrontmatter,
   parseFrontmatter,
+  serializeFrontmatter,
 } from '~/lib/plans/frontmatter'
-import { PLAN_STATES, type PlanState, parsePlanPath } from '~/lib/plans/states'
+import {
+  PLAN_STATES,
+  type PlanState,
+  parsePlanPath,
+  planStateDef,
+} from '~/lib/plans/states'
 import { unifiedDiff } from '~/lib/plans/text-diff'
 import type {
   BranchActivityStatus,
   PlanBranchTab,
   PlanDetail,
+  PlanMovePreview,
   PlanSummary,
   PlanView,
   PullRequestActivity,
@@ -392,6 +402,316 @@ export async function loadPlanDetail(
     bodySha: file.sha,
     body: parsed.content,
   }
+}
+
+/** The raw file text of a plan on the default branch, plus its blob sha. */
+export interface PlanSource {
+  path: string
+  /** Verbatim file content (frontmatter + body), as stored in git. */
+  content: string
+  /** Git blob sha — carried back on save as the base-SHA conflict guard. */
+  sha: string
+}
+
+/**
+ * Fetch a plan's raw file for editing: the exact bytes on the default branch and
+ * the blob sha to write against. Read fresh (not from the stripped body cache)
+ * so hand-editing round-trips every frontmatter key, including ones the reader
+ * doesn't model (e.g. `scope`).
+ */
+export async function loadPlanSource(
+  db: Db,
+  env: AppEnv,
+  ctx: RepoContext,
+  path: string,
+): Promise<PlanSource | null> {
+  if (!parsePlanPath(path)) return null
+  const { repo, installation } = ctx
+  const token = await getInstallationToken(db, env, installation)
+  const file = await fetchContentFile(
+    token,
+    repo.owner,
+    repo.name,
+    path,
+    repo.defaultBranch,
+  )
+  if (!file) return null
+  return { path, content: file.text, sha: file.sha }
+}
+
+export type WritePlanResult =
+  | { ok: true; plan: PlanDetail }
+  /** The base sha was stale — someone else changed the file first. */
+  | { ok: false; reason: 'conflict' }
+  /** The edited content is no longer a valid plan (missing title). */
+  | { ok: false; reason: 'invalid' }
+
+/**
+ * Write a hand-edited plan back to GitHub as one App-authored commit to the
+ * default branch, guarded by the base sha the edit started from. On success the
+ * D1 cache is refreshed to the new content/sha and the mutation is recorded in
+ * the audit log against the user who triggered it.
+ */
+export async function writePlan(
+  db: Db,
+  env: AppEnv,
+  ctx: RepoContext,
+  userId: string,
+  path: string,
+  content: string,
+  baseSha: string,
+): Promise<WritePlanResult> {
+  const info = parsePlanPath(path)
+  if (!info) return { ok: false, reason: 'invalid' }
+
+  const parsed = parseFrontmatter(content)
+  if (!isValidPlanFrontmatter(parsed.data))
+    return { ok: false, reason: 'invalid' }
+  const title = parsed.data.title ?? info.slug
+
+  const { repo, installation } = ctx
+  const token = await getInstallationToken(db, env, installation)
+
+  let result: Awaited<ReturnType<typeof putFile>>
+  try {
+    result = await putFile(token, repo.owner, repo.name, path, {
+      content,
+      message: `plans: update ${title}`,
+      sha: baseSha,
+      branch: repo.defaultBranch,
+    })
+  } catch (err) {
+    // 409 (sha mismatch) and 422 (also raised for stale sha) both mean the base
+    // moved under us — surface as a conflict rather than a hard error.
+    if (
+      err instanceof GitHubError &&
+      (err.status === 409 || err.status === 422)
+    )
+      return { ok: false, reason: 'conflict' }
+    throw err
+  }
+
+  const nowMs = Date.now()
+  await db
+    .insert(planCache)
+    .values({
+      id: newId(),
+      repoId: repo.id,
+      path,
+      state: info.state,
+      title,
+      status: parsed.data.status ?? null,
+      createdFm: parsed.data.created ?? null,
+      updatedFm: parsed.data.updated ?? null,
+      bodySha: result.blobSha,
+      body: parsed.content,
+      cachedAt: nowMs,
+    })
+    .onConflictDoUpdate({
+      target: [planCache.repoId, planCache.path],
+      set: {
+        state: info.state,
+        title,
+        status: parsed.data.status ?? null,
+        createdFm: parsed.data.created ?? null,
+        updatedFm: parsed.data.updated ?? null,
+        bodySha: result.blobSha,
+        body: parsed.content,
+        cachedAt: nowMs,
+      },
+    })
+
+  await db.insert(auditLog).values({
+    id: newId(),
+    userId,
+    repoId: repo.id,
+    action: 'plan.update',
+    paths: JSON.stringify([path]),
+    commitSha: result.commitSha,
+    createdAt: nowMs,
+  })
+
+  return {
+    ok: true,
+    plan: {
+      path,
+      state: info.state,
+      slug: info.slug,
+      title,
+      status: parsed.data.status ?? null,
+      created: parsed.data.created ?? null,
+      updated: parsed.data.updated ?? null,
+      bodySha: result.blobSha,
+      body: parsed.content,
+    },
+  }
+}
+
+function todayIso(): string {
+  return new Date().toISOString().slice(0, 10)
+}
+
+/**
+ * Draft a plan's move to a new state with Claude (via AI Gateway) and return a
+ * preview — nothing is committed here. The model rewrites only the body; we
+ * re-attach the frontmatter with the new `status` and today's `updated` so the
+ * lifecycle fields are set deterministically rather than by the model.
+ */
+export async function proposePlanMove(
+  db: Db,
+  env: AppEnv,
+  ctx: RepoContext,
+  path: string,
+  toState: PlanState,
+  context: string | undefined,
+): Promise<PlanMovePreview> {
+  const info = parsePlanPath(path)
+  if (!info) throw new Error('Not a plan path')
+  if (info.state === toState) throw new Error('Plan is already in that state')
+
+  const source = await loadPlanSource(db, env, ctx, path)
+  if (!source) throw new Error('Plan not found')
+
+  const parsed = parseFrontmatter(source.content)
+  const title = parsed.data.title ?? info.slug
+
+  const { system, prompt } = buildMovePrompt({
+    title,
+    fromState: info.state,
+    toState,
+    body: parsed.content,
+    context,
+  })
+  const newBody = await completeText(env, { system, prompt })
+
+  const newContent = serializeFrontmatter(
+    {
+      ...parsed.data,
+      status: planStateDef(toState).status,
+      updated: todayIso(),
+    },
+    newBody,
+  )
+  const newPath = `plans/${toState}/${info.slug}.md`
+
+  // Slugs aren't unique across state directories, so the destination path can
+  // already hold a *different* plan. Surface that here so the preview can warn —
+  // committing would otherwise overwrite it. commitPlanMove re-checks and blocks.
+  const { repo, installation } = ctx
+  const token = await getInstallationToken(db, env, installation)
+  const destination = await fetchContentFile(
+    token,
+    repo.owner,
+    repo.name,
+    newPath,
+    repo.defaultBranch,
+  )
+
+  return {
+    title,
+    fromState: info.state,
+    toState,
+    oldPath: path,
+    newPath,
+    newContent,
+    baseSha: source.sha,
+    diff: unifiedDiff(source.content, newContent),
+    warnings: toState === 'ready' ? findOpenQuestions(newBody) : [],
+    destinationExists: destination !== null,
+  }
+}
+
+export type MovePlanResult =
+  | { ok: true; newPath: string; commitSha: string }
+  /** The source file changed on GitHub since the preview was drafted. */
+  | { ok: false; reason: 'conflict' }
+  /** A different plan already occupies the destination path — refused to clobber it. */
+  | { ok: false; reason: 'destination-exists' }
+
+/**
+ * Commit an approved move as one atomic commit (delete old path + write new
+ * path) via the Git Data API, guarded by the base sha the preview was drafted
+ * from. Both cache rows are dropped so the next load rebuilds from GitHub.
+ */
+export async function commitPlanMove(
+  db: Db,
+  env: AppEnv,
+  ctx: RepoContext,
+  userId: string,
+  input: {
+    oldPath: string
+    newPath: string
+    newContent: string
+    baseSha: string
+  },
+): Promise<MovePlanResult> {
+  const newInfo = parsePlanPath(input.newPath)
+  if (!parsePlanPath(input.oldPath) || !newInfo)
+    throw new Error('Invalid plan path')
+
+  const { repo, installation } = ctx
+  const token = await getInstallationToken(db, env, installation)
+
+  // Conflict guard: the source file must be unchanged since the preview.
+  const current = await fetchContentFile(
+    token,
+    repo.owner,
+    repo.name,
+    input.oldPath,
+    repo.defaultBranch,
+  )
+  if (!current || current.sha !== input.baseSha)
+    return { ok: false, reason: 'conflict' }
+
+  // Never overwrite a different plan already sitting at the destination path.
+  const occupant = await fetchContentFile(
+    token,
+    repo.owner,
+    repo.name,
+    input.newPath,
+    repo.defaultBranch,
+  )
+  if (occupant) return { ok: false, reason: 'destination-exists' }
+
+  const parsed = parseFrontmatter(input.newContent)
+  if (!isValidPlanFrontmatter(parsed.data))
+    throw new Error('Proposed plan is missing a title')
+  const title = parsed.data.title ?? newInfo.slug
+
+  const { commitSha } = await createCommit(
+    token,
+    repo.owner,
+    repo.name,
+    repo.defaultBranch,
+    {
+      message: `plans: move ${title} to ${planStateDef(newInfo.state).label}`,
+      changes: [
+        { path: input.oldPath, content: null },
+        { path: input.newPath, content: input.newContent },
+      ],
+    },
+  )
+
+  await db
+    .delete(planCache)
+    .where(
+      and(
+        eq(planCache.repoId, repo.id),
+        inArray(planCache.path, [input.oldPath, input.newPath]),
+      ),
+    )
+
+  await db.insert(auditLog).values({
+    id: newId(),
+    userId,
+    repoId: repo.id,
+    action: 'plan.move',
+    paths: JSON.stringify([input.oldPath, input.newPath]),
+    commitSha,
+    createdAt: Date.now(),
+  })
+
+  return { ok: true, newPath: input.newPath, commitSha }
 }
 
 function defaultTab(): PlanBranchTab {

@@ -24,3 +24,14 @@ TOKEN_ENCRYPTION_KEY="base64-32-byte-key"
 # The public origin of the deployment (no trailing slash). Used to build the
 # OAuth redirect URI and to validate webhook/CSRF origins.
 APP_URL="http://localhost:5173"
+
+# --- AI (Cloudflare AI Gateway → Claude) ---
+# AI moves (Phase 3+) route Claude calls through a Cloudflare AI Gateway.
+# Cloudflare supplies the Anthropic credentials via Unified Billing (load credits
+# into your Cloudflare account) or a stored provider key (BYOK) — so no Anthropic
+# key lives here. Enable an *authenticated* gateway and create a token for it.
+# Account id + gateway slug (Dashboard → AI → AI Gateway).
+CF_AI_GATEWAY_ACCOUNT_ID="your-cloudflare-account-id"
+CF_AI_GATEWAY_ID="your-gateway-slug"
+# The gateway's authenticated token (sent as `cf-aig-authorization`).
+CF_AI_GATEWAY_TOKEN="your-ai-gateway-token"
