@@ -2,12 +2,24 @@
 title: Planning CMS
 status: Ready
 created: 2026-07-19
-updated: 2026-07-19
+updated: 2026-07-26
 ---
 
 ## Goal
 
 A multi-tenant web app on Cloudflare that reads the `plans/` directories across a user's GitHub repos (the ones that use the [`plans`](../../skills/plans/SKILL.md) skill) and lets them browse, edit, move, and converse with each repo's plans — with AI assistance and every change written back as a git commit. Built product-shaped, shipped in thin phases starting with a read-only reader.
+
+## Current status (2026-07-26)
+
+**Phases 0–3 are shipped and merged** (PR #10). The app can: log in, list repos with `plans/`, browse plans by state, render a plan, **hand-edit** a plan and commit it back (Editor/Preview toggle, base-SHA conflict guard), and **move** a plan between states with Claude drafting the rewrite through Cloudflare AI Gateway → diff preview → atomic move-and-update commit.
+
+**Next up: Phase 4** — AI-drafted new backlog items (rough idea → Claude fleshes it out → preview → commit into `plans/backlog/`). It reuses the AI Gateway client (`src/lib/ai/`) and the `putFile` create path already built in `src/lib/github/write.ts`, so it's a smaller lift than Phase 3.
+
+**Runtime config the deployment needs for the AI/edit features to work live** (code is done; these are operational):
+- GitHub App must have **Contents: read & write** granted *and the installation must have accepted it* (Phase 2/3 writes).
+- An **authenticated** Cloudflare AI Gateway with **Unified Billing** credits (or a stored BYOK key), plus the three secrets `CF_AI_GATEWAY_ACCOUNT_ID`, `CF_AI_GATEWAY_ID`, `CF_AI_GATEWAY_TOKEN` (local: `.dev.vars`; prod: `wrangler secret put`). No Anthropic key is used — the app authenticates to the gateway via `cf-aig-authorization`.
+
+Key new code from Phases 2–3: `src/lib/ai/` (gateway client + move prompts), `src/lib/github/write.ts` (`putFile` + `createCommit`), the write/move logic in `src/server/plans.server.ts`, its RPCs in `src/server/repo.functions.ts`, and the editor + move UI in `src/routes/repos/$owner/$repo/plan/$.tsx`.
 
 ## Context
 
@@ -111,4 +123,4 @@ Secrets (installation tokens, any cached credentials) encrypted at rest with a k
 - [ ] **Phase 4:** new-backlog-item flow with AI fleshing-out and preview.
 - [ ] **Phase 5:** Flue agent in a sandbox with ephemeral clone; Durable Object session persistence; agentic edits through the preview path; Workflows for long runs.
 - [ ] **Phase 6:** AI quotas + rate limits; org/team support; audit UI; polish.
-- [ ] **Cross-cutting:** AI Gateway (unified billing) setup; secrets management; error/empty/loading states; tests for the GitHub read/write path and frontmatter parsing.
+- [x] **Cross-cutting (partial):** AI Gateway client (unified-billing auth via `cf-aig-authorization`) + secrets wired; tests for the GitHub read/write path (`fetchContentFile`, `putFile`, `createCommit`), the move prompts, and the gateway client. *Still open:* per-repo error/empty/loading polish and broader server-orchestration test coverage (no D1/token test harness exists yet).
