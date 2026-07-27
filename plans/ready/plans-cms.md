@@ -11,7 +11,7 @@ A multi-tenant web app on Cloudflare that reads the `plans/` directories across 
 
 ## Current status (2026-07-26)
 
-**Phases 0–3 are shipped and merged** (PR #10); **Phase 4 is built** (on branch `phase-4-new-backlog-items`, pending review). The app can: log in, list repos with `plans/`, browse plans by state, render a plan, **hand-edit** a plan and commit it back (Editor/Preview toggle, base-SHA conflict guard), **move** a plan between states with Claude drafting the rewrite through Cloudflare AI Gateway → diff preview → atomic move-and-update commit, and **create a new backlog item** from a rough idea (Claude proposes a title + body → rendered preview → App-authored commit into `plans/backlog/`).
+**Phases 0–4 are shipped and merged** (Phases 2–3 in PR #10, Phase 4 in PR #12). The app can: log in, list repos with `plans/`, browse plans by state, render a plan, **hand-edit** a plan and commit it back (Editor/Preview toggle, base-SHA conflict guard), **move** a plan between states with Claude drafting the rewrite through Cloudflare AI Gateway → diff preview → atomic move-and-update commit, and **create a new backlog item** from a rough idea (Claude proposes a title + body → rendered preview → App-authored commit into `plans/backlog/`).
 
 **Next up: Phase 5** — Flue chat (agentic): a per-repo conversation in a Cloudflare sandbox with an ephemeral clone, session state in a Durable Object, and agent-proposed edits flowing through the same rich-preview-and-commit path. A much larger lift (sandbox, Durable Object, Workflows) than Phases 2–4.
 
