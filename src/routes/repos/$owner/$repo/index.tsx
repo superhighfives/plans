@@ -1,6 +1,8 @@
 import { createFileRoute, Link, useRouter } from '@tanstack/react-router'
 import { useServerFn } from '@tanstack/react-start'
 import { useState } from 'react'
+import ReactMarkdown from 'react-markdown'
+import remarkGfm from 'remark-gfm'
 import type { PlanChange } from '~/lib/plans/diff'
 import {
   PLAN_STATE_LABELS,
@@ -8,11 +10,17 @@ import {
   type PlanState,
 } from '~/lib/plans/states'
 import type {
+  NewBacklogPreview,
   PlanSummary,
   PullRequestActivity,
   RepoPlans,
 } from '~/lib/plans/types'
-import { getRepoPlans, refreshRepoPlans } from '~/server/repo.functions'
+import {
+  commitBacklogItem,
+  getRepoPlans,
+  proposeBacklogItem,
+  refreshRepoPlans,
+} from '~/server/repo.functions'
 
 /** A plan heading into a column on a branch (a new plan or a state move). */
 interface GhostCard {
@@ -75,6 +83,7 @@ function RepoPage() {
   const router = useRouter()
   const refresh = useServerFn(refreshRepoPlans)
   const [busy, setBusy] = useState(false)
+  const [creating, setCreating] = useState(false)
   // True while the loader re-runs on an already-rendered page (background
   // revalidation after staleTime, or an explicit refresh).
   const revalidating = Route.useMatch({ select: (m) => Boolean(m.isFetching) })
@@ -112,16 +121,33 @@ function RepoPage() {
               : ''}
           </p>
         </div>
-        <button
-          type="button"
-          className="btn btn--ghost"
-          onClick={onRefresh}
-          disabled={refreshing}
-        >
-          {refreshing ? <Spinner /> : null}
-          {refreshing ? 'Refreshing…' : 'Refresh'}
-        </button>
+        <div className="page-head__actions">
+          <button
+            type="button"
+            className="btn"
+            onClick={() => setCreating((v) => !v)}
+          >
+            New backlog item
+          </button>
+          <button
+            type="button"
+            className="btn btn--ghost"
+            onClick={onRefresh}
+            disabled={refreshing}
+          >
+            {refreshing ? <Spinner /> : null}
+            {refreshing ? 'Refreshing…' : 'Refresh'}
+          </button>
+        </div>
       </div>
+
+      {creating ? (
+        <NewBacklogItem
+          owner={owner}
+          repo={repo}
+          onClose={() => setCreating(false)}
+        />
+      ) : null}
 
       {data.truncated ? (
         <p className="notice">
@@ -171,6 +197,155 @@ function RepoPage() {
         </div>
       )}
     </section>
+  )
+}
+
+/**
+ * Draft a new backlog item with AI. The user types a rough idea, Claude proposes
+ * a title + body, and the rendered plan is shown for approval before anything is
+ * committed into plans/backlog/ (mirrors the Phase 3 move preview path).
+ */
+function NewBacklogItem({
+  owner,
+  repo,
+  onClose,
+}: {
+  owner: string
+  repo: string
+  onClose: () => void
+}) {
+  const router = useRouter()
+  const [idea, setIdea] = useState('')
+  const [drafting, setDrafting] = useState(false)
+  const [preview, setPreview] = useState<NewBacklogPreview | null>(null)
+  const [committing, setCommitting] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+
+  async function draft() {
+    if (idea.trim().length === 0) return
+    setDrafting(true)
+    setError(null)
+    setPreview(null)
+    try {
+      const result = await proposeBacklogItem({ data: { owner, repo, idea } })
+      setPreview(result)
+    } catch {
+      setError(
+        "Couldn't draft the item. The AI Gateway may not be configured, or the request failed — try again.",
+      )
+    } finally {
+      setDrafting(false)
+    }
+  }
+
+  async function approve() {
+    if (!preview) return
+    setCommitting(true)
+    setError(null)
+    try {
+      const result = await commitBacklogItem({
+        data: {
+          owner,
+          repo,
+          path: preview.path,
+          newContent: preview.newContent,
+        },
+      })
+      if (result.ok) {
+        await router.navigate({
+          to: '/repos/$owner/$repo/plan/$',
+          params: { owner, repo, _splat: result.path },
+        })
+        await router.invalidate()
+        return
+      }
+      setError(
+        `A file already exists at ${preview.path}. Draft again to get a fresh filename.`,
+      )
+    } catch {
+      setError("Couldn't commit the item — try again.")
+    } finally {
+      setCommitting(false)
+    }
+  }
+
+  if (preview) {
+    return (
+      <div className="move">
+        <h2 className="move__title">New backlog item — preview</h2>
+        <dl className="plan__meta">
+          <div>
+            <dt>Title</dt>
+            <dd>{preview.title}</dd>
+          </div>
+          <div>
+            <dt>Path</dt>
+            <dd>
+              <code>{preview.path}</code>
+            </dd>
+          </div>
+        </dl>
+        <article className="markdown">
+          <ReactMarkdown remarkPlugins={[remarkGfm]}>
+            {preview.body}
+          </ReactMarkdown>
+        </article>
+        {error ? <p className="plan-editor__error">{error}</p> : null}
+        <div className="plan-editor__bar">
+          <button
+            type="button"
+            className="btn"
+            onClick={approve}
+            disabled={committing}
+          >
+            {committing ? 'Committing…' : 'Approve & commit'}
+          </button>
+          <button
+            type="button"
+            className="btn btn--ghost"
+            onClick={() => setPreview(null)}
+            disabled={committing}
+          >
+            Discard
+          </button>
+        </div>
+      </div>
+    )
+  }
+
+  return (
+    <div className="move">
+      <h2 className="move__title">New backlog item</h2>
+      <p className="move__hint">
+        Describe a rough idea. Claude drafts a backlog entry — with a title and
+        a sketch — then shows it to you before anything is committed.
+      </p>
+      <textarea
+        className="move__context"
+        placeholder="A rough idea for something to work on…"
+        value={idea}
+        onChange={(e) => setIdea(e.target.value)}
+      />
+      {error ? <p className="plan-editor__error">{error}</p> : null}
+      <div className="plan-editor__bar">
+        <button
+          type="button"
+          className="btn"
+          onClick={draft}
+          disabled={drafting || idea.trim().length === 0}
+        >
+          {drafting ? 'Drafting…' : 'Draft with AI'}
+        </button>
+        <button
+          type="button"
+          className="btn btn--ghost"
+          onClick={onClose}
+          disabled={drafting}
+        >
+          Cancel
+        </button>
+      </div>
+    </div>
   )
 }
 

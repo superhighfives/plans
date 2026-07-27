@@ -3,8 +3,13 @@ import type { Db } from '~/db'
 import type { Installation, PlanCacheRow, Repo } from '~/db/schema'
 import { auditLog, installations, planCache, repos } from '~/db/schema'
 import type { AppEnv } from '~/env'
-import { completeText } from '~/lib/ai/gateway'
-import { buildMovePrompt, findOpenQuestions } from '~/lib/ai/plan-prompts'
+import { completeStructured, completeText } from '~/lib/ai/gateway'
+import {
+  buildMovePrompt,
+  buildNewBacklogPrompt,
+  findOpenQuestions,
+  NEW_BACKLOG_TOOL,
+} from '~/lib/ai/plan-prompts'
 import { newId } from '~/lib/crypto'
 import { getInstallationToken } from '~/lib/github/app'
 import { GitHubError } from '~/lib/github/client'
@@ -22,8 +27,10 @@ import {
   parseFrontmatter,
   serializeFrontmatter,
 } from '~/lib/plans/frontmatter'
+import { slugify, uniqueSlug } from '~/lib/plans/slug'
 import {
   PLAN_STATES,
+  type PlanPathInfo,
   type PlanState,
   parsePlanPath,
   planStateDef,
@@ -31,6 +38,7 @@ import {
 import { unifiedDiff } from '~/lib/plans/text-diff'
 import type {
   BranchActivityStatus,
+  NewBacklogPreview,
   PlanBranchTab,
   PlanDetail,
   PlanMovePreview,
@@ -712,6 +720,149 @@ export async function commitPlanMove(
   })
 
   return { ok: true, newPath: input.newPath, commitSha }
+}
+
+/**
+ * Draft a new backlog item from a rough idea with Claude (via AI Gateway) and
+ * return a preview — nothing is committed here. The model proposes a title and a
+ * rough body; the server derives a collision-free kebab-case filename and
+ * attaches the frontmatter (status: Backlog, created/updated: today) so the
+ * lifecycle fields are set deterministically rather than by the model.
+ */
+export async function proposeNewBacklog(
+  db: Db,
+  env: AppEnv,
+  ctx: RepoContext,
+  idea: string,
+): Promise<NewBacklogPreview> {
+  const { repo, installation } = ctx
+  const token = await getInstallationToken(db, env, installation)
+
+  const { system, prompt } = buildNewBacklogPrompt({ idea })
+  const draft = await completeStructured<{ title: string; body: string }>(env, {
+    system,
+    prompt,
+    tool: NEW_BACKLOG_TOOL,
+  })
+  const title = draft.title.trim() || 'Untitled plan'
+  const body = draft.body.trim()
+
+  // Derive a filename that doesn't collide with an existing backlog plan. Slugs
+  // are only unique within a state directory, so we only compare against backlog.
+  const tree = await listPlanTree(
+    token,
+    repo.owner,
+    repo.name,
+    repo.defaultBranch,
+  )
+  const takenSlugs = new Set(
+    tree.entries
+      .map((e) => parsePlanPath(e.path))
+      .filter((i): i is PlanPathInfo => i?.state === 'backlog')
+      .map((i) => i.slug),
+  )
+  const slug = uniqueSlug(slugify(title), takenSlugs)
+  const path = `plans/backlog/${slug}.md`
+
+  const newContent = serializeFrontmatter(
+    {
+      title,
+      status: planStateDef('backlog').status,
+      created: todayIso(),
+      updated: todayIso(),
+    },
+    body,
+  )
+
+  return { title, slug, path, newContent, body }
+}
+
+export type CreatePlanResult =
+  | { ok: true; path: string; commitSha: string }
+  /** A file already exists at the destination path — refused to clobber it. */
+  | { ok: false; reason: 'exists' }
+
+/**
+ * Commit an approved new backlog item as one App-authored commit via the
+ * Contents API create path (no base sha → GitHub 422s if the path already
+ * exists, our guard against clobbering a file added since the preview). On
+ * success the cache row is seeded and the mutation is recorded in the audit log.
+ */
+export async function commitNewBacklog(
+  db: Db,
+  env: AppEnv,
+  ctx: RepoContext,
+  userId: string,
+  input: { path: string; newContent: string },
+): Promise<CreatePlanResult> {
+  const info = parsePlanPath(input.path)
+  if (!info || info.state !== 'backlog')
+    throw new Error('New plans go into plans/backlog/')
+
+  const parsed = parseFrontmatter(input.newContent)
+  if (!isValidPlanFrontmatter(parsed.data))
+    throw new Error('Proposed plan is missing a title')
+  const title = parsed.data.title ?? info.slug
+
+  const { repo, installation } = ctx
+  const token = await getInstallationToken(db, env, installation)
+
+  let result: Awaited<ReturnType<typeof putFile>>
+  try {
+    result = await putFile(token, repo.owner, repo.name, input.path, {
+      content: input.newContent,
+      message: `plans: add ${title}`,
+      branch: repo.defaultBranch,
+    })
+  } catch (err) {
+    // 422 = a file already exists at this path on a create-only PUT (someone
+    // added it between the preview and now) — surface so the user re-drafts.
+    if (err instanceof GitHubError && err.status === 422)
+      return { ok: false, reason: 'exists' }
+    throw err
+  }
+
+  const nowMs = Date.now()
+  await db
+    .insert(planCache)
+    .values({
+      id: newId(),
+      repoId: repo.id,
+      path: input.path,
+      state: info.state,
+      title,
+      status: parsed.data.status ?? null,
+      createdFm: parsed.data.created ?? null,
+      updatedFm: parsed.data.updated ?? null,
+      bodySha: result.blobSha,
+      body: parsed.content,
+      cachedAt: nowMs,
+    })
+    .onConflictDoUpdate({
+      target: [planCache.repoId, planCache.path],
+      set: {
+        state: info.state,
+        title,
+        status: parsed.data.status ?? null,
+        createdFm: parsed.data.created ?? null,
+        updatedFm: parsed.data.updated ?? null,
+        bodySha: result.blobSha,
+        body: parsed.content,
+        cachedAt: nowMs,
+      },
+    })
+
+  await db.insert(auditLog).values({
+    id: newId(),
+    userId,
+    repoId: repo.id,
+    action: 'plan.create',
+    paths: JSON.stringify([input.path]),
+    commitSha: result.commitSha,
+    createdAt: nowMs,
+  })
+
+  return { ok: true, path: input.path, commitSha: result.commitSha }
 }
 
 function defaultTab(): PlanBranchTab {

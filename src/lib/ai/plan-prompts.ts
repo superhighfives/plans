@@ -1,3 +1,4 @@
+import type Anthropic from '@anthropic-ai/sdk'
 import { type PlanState, planStateDef } from '~/lib/plans/states'
 
 const SYSTEM = `You are a meticulous engineering planner maintaining a repository's implementation specs.
@@ -80,6 +81,58 @@ export function buildMovePrompt(opts: {
     .filter((line) => line !== null)
     .join('\n')
   return { system: SYSTEM, prompt }
+}
+
+const NEW_BACKLOG_SYSTEM = `You are a meticulous engineering planner helping seed a repository's backlog.
+
+You turn a rough idea into a BACKLOG-stage plan — an early, unscoped note, NOT a finished spec. Fleshing it into a full spec happens later, when it's promoted to "ready". Rules:
+- Propose a concise, descriptive title (a few words, sentence case) that names the work.
+- Write a short markdown body: a paragraph or two capturing the idea and why it might matter, a brief bullet sketch of what it could involve, and an "## Open questions" list of what still needs deciding. Keep it rough and honest about unknowns.
+- Never invent specifics (APIs, file names, numbers) that aren't implied by the idea — prefer an open question over a fabricated detail.
+- The body is markdown only: no frontmatter (no leading --- block), no code fence around the whole thing, no preamble or closing commentary. Do NOT repeat the title as a heading — the plan's frontmatter already holds it.`
+
+/** Tool the model answers through so we get a structured {title, body} back. */
+export const NEW_BACKLOG_TOOL: Anthropic.Tool = {
+  name: 'emit_backlog_item',
+  description:
+    'Return the drafted backlog item: a concise title and a rough markdown body.',
+  input_schema: {
+    type: 'object',
+    properties: {
+      title: {
+        type: 'string',
+        description: 'Concise, descriptive plan title in sentence case.',
+      },
+      body: {
+        type: 'string',
+        description:
+          'Rough backlog-stage markdown body — no frontmatter, no title heading.',
+      },
+    },
+    required: ['title', 'body'],
+  },
+}
+
+/**
+ * Build the prompt to draft a new backlog item from a rough idea. The model
+ * answers via {@link NEW_BACKLOG_TOOL}; the server slugifies the returned title
+ * and attaches frontmatter (status: Backlog, created/updated: today).
+ */
+export function buildNewBacklogPrompt(opts: { idea: string }): {
+  system: string
+  prompt: string
+} {
+  const prompt = [
+    'Turn this rough idea into a backlog-stage plan.',
+    '',
+    'Rough idea from the author:',
+    '"""',
+    opts.idea.trim(),
+    '"""',
+    '',
+    'Return the title and body via the emit_backlog_item tool.',
+  ].join('\n')
+  return { system: NEW_BACKLOG_SYSTEM, prompt }
 }
 
 /**

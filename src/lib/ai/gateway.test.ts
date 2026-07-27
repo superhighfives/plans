@@ -10,7 +10,7 @@ vi.mock('@anthropic-ai/sdk', () => ({
   },
 }))
 
-import { AIConfigError, completeText } from './gateway'
+import { AIConfigError, completeStructured, completeText } from './gateway'
 
 const env = {
   CF_AI_GATEWAY_ACCOUNT_ID: 'acct',
@@ -53,5 +53,46 @@ describe('completeText', () => {
       }),
     ).rejects.toBeInstanceOf(AIConfigError)
     expect(createMock).not.toHaveBeenCalled()
+  })
+})
+
+const tool = {
+  name: 'emit',
+  description: 'd',
+  input_schema: { type: 'object' as const, properties: {} },
+}
+
+describe('completeStructured', () => {
+  it('forces the tool and returns its parsed input', async () => {
+    createMock.mockResolvedValue({
+      content: [
+        { type: 'text', text: 'ignored prose' },
+        { type: 'tool_use', name: 'emit', input: { title: 'T', body: 'B' } },
+      ],
+    })
+
+    const out = await completeStructured<{ title: string; body: string }>(env, {
+      system: 'sys',
+      prompt: 'go',
+      tool,
+    })
+
+    expect(out).toEqual({ title: 'T', body: 'B' })
+    expect(createMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        tools: [tool],
+        tool_choice: { type: 'tool', name: 'emit' },
+      }),
+    )
+    // Structured calls don't enable extended thinking (incompatible with a
+    // forced tool_choice).
+    expect(createMock.mock.calls[0]?.[0]).not.toHaveProperty('thinking')
+  })
+
+  it('throws when the model returns no matching tool_use block', async () => {
+    createMock.mockResolvedValue({ content: [{ type: 'text', text: 'nope' }] })
+    await expect(
+      completeStructured(env, { system: 's', prompt: 'p', tool }),
+    ).rejects.toThrow(/structured output/)
   })
 })
