@@ -43,6 +43,20 @@ export interface PlanMovePreview {
   destinationExists: boolean
 }
 
+/** An AI-drafted new backlog item, awaiting the user's approval before commit. */
+export interface NewBacklogPreview {
+  /** The title Claude proposed for the plan. */
+  title: string
+  /** Kebab-case filename slug derived from the title (deduped within backlog/). */
+  slug: string
+  /** Destination path: plans/backlog/<slug>.md */
+  path: string
+  /** Full proposed file (frontmatter + body) to commit at `path`. */
+  newContent: string
+  /** The drafted markdown body only, for a rendered preview. */
+  body: string
+}
+
 /** One selectable ref for a plan in the detail view: the default branch or a PR. */
 export interface PlanBranchTab {
   kind: 'default' | 'pr'

@@ -257,6 +257,11 @@ form {
   margin: 0 0 4px;
   letter-spacing: -0.01em;
 }
+.page-head__actions {
+  display: flex;
+  gap: 8px;
+  flex-shrink: 0;
+}
 .muted {
   color: var(--muted);
   font-size: 14px;

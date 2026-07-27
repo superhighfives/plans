@@ -4,6 +4,7 @@ import { getDb } from '~/db'
 import { getEnv } from '~/env'
 import { isPlanPath, isPlanState, type PlanState } from '~/lib/plans/states'
 import type {
+  NewBacklogPreview,
   PlanDetail,
   PlanMovePreview,
   PlanView,
@@ -11,6 +12,8 @@ import type {
 } from '~/lib/plans/types'
 import { authMiddleware } from './auth-middleware'
 import {
+  type CreatePlanResult,
+  commitNewBacklog,
   commitPlanMove,
   loadPlanDetail,
   loadPlanSource,
@@ -18,6 +21,7 @@ import {
   loadRepoPlans,
   type MovePlanResult,
   type PlanSource,
+  proposeNewBacklog,
   proposePlanMove,
   resolveAccessibleRepo,
   type WritePlanResult,
@@ -57,6 +61,18 @@ interface CommitMoveInput extends RepoInput {
   newPath: string
   newContent: string
   baseSha: string
+}
+
+interface ProposeBacklogInput extends RepoInput {
+  /** The rough idea the AI fleshes into a backlog item. */
+  idea: string
+}
+
+interface CommitBacklogInput extends RepoInput {
+  /** Destination path (plans/backlog/<slug>.md) from the preview. */
+  path: string
+  /** Full proposed file (frontmatter + body) to commit. */
+  newContent: string
 }
 
 function validateRepoInput(data: RepoInput): RepoInput {
@@ -281,5 +297,55 @@ export const commitMove = createServerFn({ method: 'POST' })
       newPath: data.newPath,
       newContent: data.newContent,
       baseSha: data.baseSha,
+    })
+  })
+
+/**
+ * Draft (but don't commit) a new backlog item from a rough idea. Returns a
+ * preview (proposed title + body + destination path) for the user to approve.
+ * Enforces per-user repo access.
+ */
+export const proposeBacklogItem = createServerFn({ method: 'POST' })
+  .middleware([authMiddleware])
+  .validator((data: ProposeBacklogInput): ProposeBacklogInput => {
+    const base = validateRepoInput(data)
+    if (typeof data.idea !== 'string' || data.idea.trim().length === 0)
+      throw new Error('an idea is required')
+    return { ...base, idea: data.idea }
+  })
+  .handler(async ({ context, data }): Promise<NewBacklogPreview> => {
+    const db = getDb()
+    const ctx = await resolveAccessibleRepo(
+      db,
+      context.user.id,
+      data.owner,
+      data.repo,
+    )
+    if (!ctx) throw notFound()
+    return proposeNewBacklog(db, getEnv(), ctx, data.idea)
+  })
+
+/** Commit an approved new backlog item. Enforces per-user repo access. */
+export const commitBacklogItem = createServerFn({ method: 'POST' })
+  .middleware([authMiddleware])
+  .validator((data: CommitBacklogInput): CommitBacklogInput => {
+    const base = validateRepoInput(data)
+    if (!data?.path || !isPlanPath(data.path)) throw notFound()
+    if (typeof data.newContent !== 'string' || data.newContent.length === 0)
+      throw new Error('newContent is required')
+    return { ...base, path: data.path, newContent: data.newContent }
+  })
+  .handler(async ({ context, data }): Promise<CreatePlanResult> => {
+    const db = getDb()
+    const ctx = await resolveAccessibleRepo(
+      db,
+      context.user.id,
+      data.owner,
+      data.repo,
+    )
+    if (!ctx) throw notFound()
+    return commitNewBacklog(db, getEnv(), ctx, context.user.id, {
+      path: data.path,
+      newContent: data.newContent,
     })
   })

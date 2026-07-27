@@ -65,3 +65,39 @@ export async function completeText(
     .join('')
     .trim()
 }
+
+/**
+ * Run a single-shot completion that MUST answer through a tool call, and return
+ * the tool's validated input. Forcing a specific tool guarantees a structured
+ * shape (no brittle prose-parsing) — used where we need more than a body back,
+ * e.g. a new plan's title *and* body. Extended thinking is left off: the API
+ * disallows forcing a specific tool while thinking is enabled, and these are
+ * short authoring calls that don't need it.
+ */
+export async function completeStructured<T>(
+  env: AppEnv,
+  params: {
+    system: string
+    prompt: string
+    tool: Anthropic.Tool
+    maxTokens?: number
+  },
+): Promise<T> {
+  assertConfigured(env)
+  const client = anthropic(env)
+  const message = await client.messages.create({
+    model: PLAN_MODEL,
+    max_tokens: params.maxTokens ?? 16000,
+    system: params.system,
+    tools: [params.tool],
+    tool_choice: { type: 'tool', name: params.tool.name },
+    messages: [{ role: 'user', content: params.prompt }],
+  })
+  const block = message.content.find(
+    (b): b is Anthropic.ToolUseBlock =>
+      b.type === 'tool_use' && b.name === params.tool.name,
+  )
+  if (!block)
+    throw new Error('Model did not return the expected structured output')
+  return block.input as T
+}
