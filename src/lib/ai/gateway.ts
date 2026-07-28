@@ -1,28 +1,10 @@
-import Anthropic from '@anthropic-ai/sdk'
 import type { AppEnv } from '~/env'
 
-/** The model we run for plan authoring. Opus-tier quality; 1M context. */
-export const PLAN_MODEL = 'claude-opus-4-8'
-
 /**
- * An Anthropic client pointed at this deployment's Cloudflare AI Gateway.
- *
- * The gateway supplies the Anthropic credentials (Unified Billing or a stored
- * BYOK key) and proxies the call — so we authenticate to the *gateway* with a
- * `cf-aig-authorization` token and never hold an Anthropic key here. The SDK
- * still requires a non-empty `apiKey`, but the gateway ignores the `x-api-key`
- * it sends. Constructed per request because env is injected per request.
+ * The model we run for plan authoring, as an AI Gateway provider-routing id
+ * (`<provider>/<model>`). Opus-tier quality; 1M context.
  */
-export function anthropic(env: AppEnv): Anthropic {
-  const baseURL = `https://gateway.ai.cloudflare.com/v1/${env.CF_AI_GATEWAY_ACCOUNT_ID}/${env.CF_AI_GATEWAY_ID}/anthropic`
-  return new Anthropic({
-    apiKey: 'unused-gateway-supplies-credentials',
-    baseURL,
-    defaultHeaders: {
-      'cf-aig-authorization': `Bearer ${env.CF_AI_GATEWAY_TOKEN}`,
-    },
-  })
-}
+export const PLAN_MODEL = 'anthropic/claude-opus-4-8'
 
 export class AIConfigError extends Error {
   constructor() {
@@ -32,12 +14,57 @@ export class AIConfigError extends Error {
 }
 
 function assertConfigured(env: AppEnv): void {
-  if (
-    !env.CF_AI_GATEWAY_ACCOUNT_ID ||
-    !env.CF_AI_GATEWAY_ID ||
-    !env.CF_AI_GATEWAY_TOKEN
-  )
-    throw new AIConfigError()
+  if (!env.AI || !env.CF_AI_GATEWAY_ID) throw new AIConfigError()
+}
+
+/** Minimal shape of an Anthropic tool definition the model answers through. */
+export interface AiTool {
+  name: string
+  description: string
+  input_schema: {
+    type: 'object'
+    properties: Record<string, unknown>
+    required?: string[]
+  }
+}
+
+/** The Anthropic-native content blocks we read back (gateway passthrough). */
+interface TextBlock {
+  type: 'text'
+  text: string
+}
+interface ToolUseBlock {
+  type: 'tool_use'
+  name: string
+  input: unknown
+}
+type ContentBlock = TextBlock | ToolUseBlock | { type: string }
+interface MessageResponse {
+  content?: ContentBlock[]
+}
+
+/**
+ * Call Anthropic through the Workers AI binding, routed via our AI Gateway.
+ *
+ * The binding authenticates as the Worker's own account and Unified Billing
+ * covers the spend — so there's no Anthropic key and no `cf-aig-authorization`
+ * token in this app at all. Provider routing is a passthrough, so `input` and
+ * the response are Anthropic's native Messages shapes.
+ *
+ * `env.AI.run` is typed against the `@cf/*` model catalog and a provider-routing
+ * id ("anthropic/…") isn't in it, so we call through a narrow local signature —
+ * a boundary cast at the untyped edge, not a suppressed error.
+ */
+function runMessages(
+  env: AppEnv,
+  input: Record<string, unknown>,
+): Promise<MessageResponse> {
+  const run = env.AI.run as unknown as (
+    model: string,
+    input: Record<string, unknown>,
+    options: { gateway: { id: string } },
+  ) => Promise<MessageResponse>
+  return run(PLAN_MODEL, input, { gateway: { id: env.CF_AI_GATEWAY_ID } })
 }
 
 /**
@@ -51,17 +78,15 @@ export async function completeText(
   params: { system: string; prompt: string; maxTokens?: number },
 ): Promise<string> {
   assertConfigured(env)
-  const client = anthropic(env)
-  const message = await client.messages.create({
-    model: PLAN_MODEL,
+  const res = await runMessages(env, {
     max_tokens: params.maxTokens ?? 16000,
     thinking: { type: 'adaptive' },
     system: params.system,
     messages: [{ role: 'user', content: params.prompt }],
   })
-  return message.content
-    .filter((block): block is Anthropic.TextBlock => block.type === 'text')
-    .map((block) => block.text)
+  return (res.content ?? [])
+    .filter((b): b is TextBlock => b.type === 'text')
+    .map((b) => b.text)
     .join('')
     .trim()
 }
@@ -79,24 +104,22 @@ export async function completeStructured<T>(
   params: {
     system: string
     prompt: string
-    tool: Anthropic.Tool
+    tool: AiTool
     maxTokens?: number
   },
 ): Promise<T> {
   assertConfigured(env)
-  const client = anthropic(env)
-  const message = await client.messages.create({
-    model: PLAN_MODEL,
+  const res = await runMessages(env, {
     max_tokens: params.maxTokens ?? 16000,
     system: params.system,
     tools: [params.tool],
     tool_choice: { type: 'tool', name: params.tool.name },
     messages: [{ role: 'user', content: params.prompt }],
   })
-  const block = message.content.find(
-    (b): b is Anthropic.ToolUseBlock =>
-      b.type === 'tool_use' && b.name === params.tool.name,
-  )
+  // tool_choice forces our one tool, so the first tool_use block is it.
+  const block = (res.content ?? []).find((b) => b.type === 'tool_use') as
+    | ToolUseBlock
+    | undefined
   if (!block)
     throw new Error('Model did not return the expected structured output')
   return block.input as T

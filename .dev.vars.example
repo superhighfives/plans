@@ -26,12 +26,9 @@ TOKEN_ENCRYPTION_KEY="base64-32-byte-key"
 APP_URL="http://localhost:5173"
 
 # --- AI (Cloudflare AI Gateway → Claude) ---
-# AI moves (Phase 3+) route Claude calls through a Cloudflare AI Gateway.
-# Cloudflare supplies the Anthropic credentials via Unified Billing (load credits
-# into your Cloudflare account) or a stored provider key (BYOK) — so no Anthropic
-# key lives here. Enable an *authenticated* gateway and create a token for it.
-# Account id + gateway slug (Dashboard → AI → AI Gateway).
-CF_AI_GATEWAY_ACCOUNT_ID="your-cloudflare-account-id"
+# AI features (Phase 3+) run Claude through the Workers AI binding (`ai` in
+# wrangler.jsonc), routed via a Cloudflare AI Gateway. Auth and billing ride on
+# your Cloudflare account (Unified Billing — load credits into the account), so
+# no gateway token or Anthropic key lives here — just the gateway slug.
+# Gateway slug (Dashboard → AI → AI Gateway).
 CF_AI_GATEWAY_ID="your-gateway-slug"
-# The gateway's authenticated token (sent as `cf-aig-authorization`).
-CF_AI_GATEWAY_TOKEN="your-ai-gateway-token"

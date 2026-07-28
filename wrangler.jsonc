@@ -17,11 +17,14 @@
       "database_id": "a325feee-984d-464b-bee9-7c90a984887f",
       "migrations_dir": "migrations"
     }
-  ]
+  ],
+  // Workers AI binding — Claude calls run through it, routed via the AI Gateway
+  // named in CF_AI_GATEWAY_ID. Auth + Unified Billing ride on the account, so no
+  // gateway token or Anthropic key is needed.
+  "ai": { "binding": "AI" }
   // Secrets (set with `wrangler secret put <NAME>` for production, or in
   // `.dev.vars` for local dev — see .dev.vars.example):
   //   GITHUB_APP_ID, GITHUB_APP_CLIENT_ID, GITHUB_APP_CLIENT_SECRET,
   //   GITHUB_APP_PRIVATE_KEY, GITHUB_WEBHOOK_SECRET,
-  //   SESSION_SECRET, TOKEN_ENCRYPTION_KEY, APP_URL,
-  //   CF_AI_GATEWAY_ACCOUNT_ID, CF_AI_GATEWAY_ID, CF_AI_GATEWAY_TOKEN
+  //   SESSION_SECRET, TOKEN_ENCRYPTION_KEY, APP_URL, CF_AI_GATEWAY_ID
 }

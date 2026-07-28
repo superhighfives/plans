@@ -1,5 +1,5 @@
-import type Anthropic from '@anthropic-ai/sdk'
 import { type PlanState, planStateDef } from '~/lib/plans/states'
+import type { AiTool } from './gateway'
 
 const SYSTEM = `You are a meticulous engineering planner maintaining a repository's implementation specs.
 
@@ -92,7 +92,7 @@ You turn a rough idea into a BACKLOG-stage plan — an early, unscoped note, NOT
 - The body is markdown only: no frontmatter (no leading --- block), no code fence around the whole thing, no preamble or closing commentary. Do NOT repeat the title as a heading — the plan's frontmatter already holds it.`
 
 /** Tool the model answers through so we get a structured {title, body} back. */
-export const NEW_BACKLOG_TOOL: Anthropic.Tool = {
+export const NEW_BACKLOG_TOOL: AiTool = {
   name: 'emit_backlog_item',
   description:
     'Return the drafted backlog item: a concise title and a rough markdown body.',
