@@ -4,7 +4,7 @@ import type { AppEnv } from '~/env'
  * The model we run for plan authoring, as an AI Gateway provider-routing id
  * (`<provider>/<model>`). Opus-tier quality; 1M context.
  */
-export const PLAN_MODEL = 'anthropic/claude-opus-4-8'
+export const PLAN_MODEL = 'anthropic/claude-opus-4.7'
 
 export class AIConfigError extends Error {
   constructor() {
