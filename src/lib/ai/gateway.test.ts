@@ -1,6 +1,11 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { AppEnv } from '~/env'
-import { AIConfigError, completeStructured, completeText } from './gateway'
+import {
+  AIConfigError,
+  completeStructured,
+  completeText,
+  PLAN_MODEL,
+} from './gateway'
 
 // The Workers AI binding is a plain object with a `run` method; mock that.
 const run = vi.fn()
@@ -27,7 +32,7 @@ describe('completeText', () => {
 
     expect(out).toBe('Hello world')
     expect(run).toHaveBeenCalledWith(
-      'anthropic/claude-opus-4-8',
+      PLAN_MODEL,
       expect.objectContaining({
         thinking: { type: 'adaptive' },
         system: 'sys',
@@ -71,7 +76,7 @@ describe('completeStructured', () => {
 
     expect(out).toEqual({ title: 'T', body: 'B' })
     expect(run).toHaveBeenCalledWith(
-      'anthropic/claude-opus-4-8',
+      PLAN_MODEL,
       expect.objectContaining({
         tools: [tool],
         tool_choice: { type: 'tool', name: 'emit' },
