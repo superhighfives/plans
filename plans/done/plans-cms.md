@@ -14,7 +14,7 @@ A multi-tenant web app on Cloudflare that reads the `plans/` directories across 
 **Phases 0–4 shipped and merged** (Phases 2–3 in PR #10, Phase 4 in PR #12); AI authoring is verified working live. The CMS can: log in with GitHub, list installations and the repos that have a `plans/` folder, browse plans by state, render a plan, **hand-edit** a plan and commit it back (Editor/Preview toggle, base-SHA conflict guard), **move** a plan between states with Claude drafting the rewrite (rich diff preview, **editable before commit**, atomic move-and-update commit), and **create a new backlog item** from a rough idea (Claude proposes a title + body → preview → App-authored commit into `plans/backlog/`). Every mutation is one bot-authored commit with an audit-log row.
 
 The two remaining phases were split into their own plans as this work wrapped — this plan now covers the reader/editor/AI CMS only:
-- **Phase 5 → `plans/backlog/flue-agent.md`** — a codebase-aware conversational agent (Flue) that grounds authoring in the actual repo and can ask clarifying questions during create/move.
+- **Phase 5 → `plans/ready/flue-agent.md`** — a codebase-aware conversational agent (Flue) that grounds authoring in the actual repo and can ask clarifying questions during create/move.
 - **Phase 6 → `plans/backlog/multi-user-and-launch.md`** — quotas, rate limits, audit UI, org/team, and getting it live beyond a single user.
 
 ### Runtime config the deployment needs (operational)
@@ -116,7 +116,7 @@ Secrets (installation tokens, any cached credentials) encrypted at rest with a k
 
 **Phase 4 — AI-assisted new backlog items.** "New backlog item" flow: user gives a rough idea, Claude fleshes it into a backlog entry (template, `status: Backlog`), preview, approve, commit into `plans/backlog/`.
 
-**Phases 5 & 6 were split into their own plans** as the CMS work wrapped — see `plans/backlog/flue-agent.md` (the conversational, codebase-aware Flue agent) and `plans/backlog/multi-user-and-launch.md` (quotas, rate limits, org/team, audit UI, launch).
+**Phases 5 & 6 were split into their own plans** as the CMS work wrapped — see `plans/ready/flue-agent.md` (the conversational, codebase-aware Flue agent) and `plans/backlog/multi-user-and-launch.md` (quotas, rate limits, org/team, audit UI, launch).
 
 ## Tasks
 
@@ -125,5 +125,5 @@ Secrets (installation tokens, any cached credentials) encrypted at rest with a k
 - [x] **Phase 2:** raw-markdown editor on the plan view; App-authored direct-commit write path (Contents API PUT — one atomic commit per edit; the Git Data API is reserved for Phase 3 moves, which touch two paths); base-SHA conflict handling (stale sha → conflict, no clobber); templated commit message (`plans: update <title>`); cache refresh + audit-log row on success.
 - [x] **Phase 3:** explicit move control + context textarea; Claude (`claude-opus-4-8`) move/update prompts per transition, run through **Cloudflare AI Gateway** (unified billing); open-questions warn-and-override when promoting to `ready`; rich preview/diff; atomic move-and-update commit via the Git Data API (blob→tree→commit→ref, non-forced), base-SHA guarded; frontmatter `status` + `updated` set deterministically server-side (the model only rewrites the body).
 - [x] **Phase 4:** new-backlog-item flow — rough idea → Claude proposes a title + rough body via forced tool-use (`completeStructured` + `NEW_BACKLOG_TOOL`); deterministic kebab-case filename (`slugify` + `uniqueSlug`, deduped within `backlog/`); frontmatter (`status: Backlog`, `created`/`updated` today) attached server-side; rendered preview; create-only `putFile` commit (422 → "already exists" guard); audit-log `plan.create` row + cache seed.
-- **Phase 5 & 6 split into their own plans** — `plans/backlog/flue-agent.md`, `plans/backlog/multi-user-and-launch.md`.
+- **Phase 5 & 6 split into their own plans** — `plans/ready/flue-agent.md`, `plans/backlog/multi-user-and-launch.md`.
 - [x] **Cross-cutting:** Claude via the **Workers AI binding** (provider routing + Unified Billing, no gateway token); tests for the GitHub read/write path (`fetchContentFile`, `putFile`, `createCommit`), the move/new-item prompts, slug helpers, and the gateway wrapper. *Carried into Phase 6:* per-repo error/empty/loading polish and broader server-orchestration test coverage (no D1/token test harness exists yet).

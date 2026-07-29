@@ -31,7 +31,7 @@ Every plan starts with YAML frontmatter:
 
 ## Current plans
 
+- **ready/flue-agent.md** — codebase-aware conversational agent (Flue). Specced; next to build.
+- **backlog/multi-user-and-launch.md** — quotas, rate limits, audit UI, launch.
 - **done/plans-cms.md** — the reader/editor/AI CMS (Phases 0–4). Shipped.
 - **done/start-endpoint.md** — the `curl | sh` bootstrap endpoint. Shipped.
-- **backlog/flue-agent.md** — codebase-aware conversational agent (Flue). Next big feature.
-- **backlog/multi-user-and-launch.md** — quotas, rate limits, audit UI, launch.
