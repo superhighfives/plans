@@ -29,10 +29,39 @@
   "durable_objects": {
     "bindings": [{ "name": "FlueAgent", "class_name": "FlueAgent" }]
   },
-  "migrations": [{ "tag": "v1", "new_sqlite_classes": ["FlueAgent"] }]
+  "migrations": [{ "tag": "v1", "new_sqlite_classes": ["FlueAgent"] }],
   // Secrets (set with `wrangler secret put <NAME>` for production, or in
   // `.dev.vars` for local dev — see .dev.vars.example):
   //   GITHUB_APP_ID, GITHUB_APP_CLIENT_ID, GITHUB_APP_CLIENT_SECRET,
   //   GITHUB_APP_PRIVATE_KEY, GITHUB_WEBHOOK_SECRET,
   //   SESSION_SECRET, TOKEN_ENCRYPTION_KEY, APP_URL, CF_AI_GATEWAY_ID
+  //
+  // Stable preview environment (`wrangler deploy --env preview`, or
+  // `npm run deploy:preview`) → the `plans-preview` Worker on its own domain,
+  // with isolated D1 + DO namespace so any branch can be reviewed live without
+  // touching prod. See plans/ready/branch-preview-deploys.md. Named
+  // environments do NOT inherit bindings, so they're all redeclared here.
+  // One-time: create the D1 (`wrangler d1 create plans-preview`), paste its id
+  // below, register the preview OAuth callback, and set `--env preview` secrets.
+  "env": {
+    "preview": {
+      "name": "plans-preview",
+      "routes": [
+        { "pattern": "plans-preview.superhighfives.com", "custom_domain": true }
+      ],
+      "d1_databases": [
+        {
+          "binding": "DB",
+          "database_name": "plans-preview",
+          "database_id": "REPLACE_WITH_PREVIEW_D1_ID",
+          "migrations_dir": "migrations"
+        }
+      ],
+      "ai": { "binding": "AI", "remote": true },
+      "durable_objects": {
+        "bindings": [{ "name": "FlueAgent", "class_name": "FlueAgent" }]
+      },
+      "migrations": [{ "tag": "v1", "new_sqlite_classes": ["FlueAgent"] }]
+    }
+  }
 }

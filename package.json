@@ -8,6 +8,7 @@
     "build": "vite build",
     "preview": "npm run build && wrangler dev",
     "deploy": "npm run build && wrangler deploy",
+    "deploy:preview": "CLOUDFLARE_ENV=preview npm run build && wrangler deploy",
     "typecheck": "tsc --noEmit",
     "lint": "biome check .",
     "lint:fix": "biome check --write .",
