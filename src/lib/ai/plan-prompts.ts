@@ -145,6 +145,9 @@ export function findOpenQuestions(body: string): string[] {
   for (const raw of lines) {
     const line = raw.trim()
     if (!line) continue
+    // A markdown heading like "## Open questions" names a *section*; it isn't
+    // itself an unresolved question. Skip it so we don't flag the heading text.
+    if (line.startsWith('#')) continue
     if (
       /\bopen question/i.test(line) ||
       /\b(TBD|TODO|FIXME)\b/.test(line) ||

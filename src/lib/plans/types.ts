@@ -31,6 +31,8 @@ export interface PlanMovePreview {
   oldPath: string
   /** Path the plan moves to (target state, same slug). */
   newPath: string
+  /** The current file (frontmatter + body) — the diff's base, for live re-diffing edits. */
+  oldContent: string
   /** Full proposed file (frontmatter + body) to commit at newPath. */
   newContent: string
   /** Blob sha the source file was read at — the conflict guard on commit. */

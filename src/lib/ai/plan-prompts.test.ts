@@ -26,6 +26,12 @@ describe('findOpenQuestions', () => {
   it('returns nothing for a clean plan', () => {
     expect(findOpenQuestions('# Plan\n\nAll settled. Ship it.')).toEqual([])
   })
+
+  it('does not flag an "Open questions" section heading itself', () => {
+    // The heading names a section; only real items under it should count.
+    const body = ['## Open questions', '', 'None — all resolved.'].join('\n')
+    expect(findOpenQuestions(body)).toEqual([])
+  })
 })
 
 describe('buildMovePrompt', () => {

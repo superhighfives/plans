@@ -9,7 +9,7 @@ import {
   PLAN_STATES,
   type PlanState,
 } from '~/lib/plans/states'
-import type { UnifiedDiff } from '~/lib/plans/text-diff'
+import { type UnifiedDiff, unifiedDiff } from '~/lib/plans/text-diff'
 import type {
   PlanBranchTab,
   PlanMovePreview,
@@ -191,6 +191,9 @@ function PlanMoveControl({
   const [context, setContext] = useState('')
   const [drafting, setDrafting] = useState<PlanState | null>(null)
   const [preview, setPreview] = useState<PlanMovePreview | null>(null)
+  // The proposed file, editable before commit. Seeded from the AI draft.
+  const [content, setContent] = useState('')
+  const [previewMode, setPreviewMode] = useState<'diff' | 'edit'>('diff')
   const [committing, setCommitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
@@ -205,6 +208,8 @@ function PlanMoveControl({
         data: { owner, repo, path, toState, context },
       })
       setPreview(result)
+      setContent(result.newContent)
+      setPreviewMode('diff')
     } catch (err) {
       const detail = err instanceof Error ? err.message : String(err)
       setError(
@@ -226,7 +231,7 @@ function PlanMoveControl({
           repo,
           oldPath: preview.oldPath,
           newPath: preview.newPath,
-          newContent: preview.newContent,
+          newContent: content,
           baseSha: preview.baseSha,
         },
       })
@@ -251,7 +256,10 @@ function PlanMoveControl({
   }
 
   if (preview) {
-    const hasDiff = preview.diff.hunks.length > 0
+    // Re-diff live against the (possibly edited) content so the diff always
+    // reflects what will actually be committed.
+    const liveDiff = unifiedDiff(preview.oldContent, content)
+    const hasDiff = liveDiff.hunks.length > 0
     return (
       <div className="move">
         <h2 className="move__title">
@@ -275,8 +283,34 @@ function PlanMoveControl({
             </ul>
           </div>
         ) : null}
-        {hasDiff ? (
-          <DiffView diff={preview.diff} />
+        <nav className="branch-tabs" aria-label="Preview mode">
+          <button
+            type="button"
+            className={`branch-tab${previewMode === 'diff' ? ' branch-tab--active' : ''}`}
+            aria-pressed={previewMode === 'diff'}
+            onClick={() => setPreviewMode('diff')}
+          >
+            Diff
+          </button>
+          <button
+            type="button"
+            className={`branch-tab${previewMode === 'edit' ? ' branch-tab--active' : ''}`}
+            aria-pressed={previewMode === 'edit'}
+            onClick={() => setPreviewMode('edit')}
+          >
+            Edit
+          </button>
+        </nav>
+        {previewMode === 'edit' ? (
+          <textarea
+            className="plan-editor__area"
+            value={content}
+            spellCheck={false}
+            onChange={(e) => setContent(e.target.value)}
+            aria-label="Proposed plan source"
+          />
+        ) : hasDiff ? (
+          <DiffView diff={liveDiff} />
         ) : (
           <p className="branch-notice">
             No textual changes — only the state and status move.

@@ -621,6 +621,7 @@ export async function proposePlanMove(
     toState,
     oldPath: path,
     newPath,
+    oldContent: source.content,
     newContent,
     baseSha: source.sha,
     diff: unifiedDiff(source.content, newContent),
