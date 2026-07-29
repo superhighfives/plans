@@ -1,6 +1,6 @@
 ---
 title: Flue agent — codebase-aware, conversational plan authoring
-status: Ready
+status: In Progress
 created: 2026-07-28
 updated: 2026-07-28
 ---
