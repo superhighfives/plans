@@ -59,7 +59,7 @@ Preview is **live** at `plans-preview.superhighfives.com` (deployed from `flue-a
 - [x] Set preview secrets + `APP_URL` → preview origin. **`SESSION_SECRET` + `TOKEN_ENCRYPTION_KEY` are now distinct from prod** (freshly generated; the initial reuse-from-`.dev.vars` was a cross-env auth-bypass risk and was replaced). GitHub App creds + `CF_AI_GATEWAY_ID` shared.
 - [x] Deploy `flue-agent` to preview; confirmed root 200 + agent gate 401 live.
 - [ ] **Register the preview OAuth callback on the GitHub App** (`https://plans-preview.superhighfives.com/api/auth/github/callback`) — then log in and confirm the Flue echo end to end.
-- [ ] **Rotate prod `SESSION_SECRET` + `TOKEN_ENCRYPTION_KEY`** before pointing real users at preview — they were briefly stored on the preview Worker during the initial (now-corrected) setup, so prod's copies should be considered exposed to the weaker environment. Low-impact on a solo app (logs you out; cached installation tokens re-mint).
+- [x] **Rotated prod `SESSION_SECRET` + `TOKEN_ENCRYPTION_KEY`** (they were briefly on the preview Worker during the initial, now-corrected setup). Live immediately via `wrangler secret put` — no redeploy; existing prod sessions are invalidated (re-login) and cached installation tokens re-mint (`src/lib/github/app.ts:67` falls back to minting on a decrypt failure). The old values can no longer forge prod sessions.
 
 ## Open questions
 
