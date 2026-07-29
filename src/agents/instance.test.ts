@@ -1,5 +1,22 @@
 import { describe, expect, it } from 'vitest'
-import { parseAgentInstance } from './instance'
+import { parseAgentInstance, parseInstanceName } from './instance'
+
+describe('parseInstanceName', () => {
+  it('splits owner~repo on the first delimiter', () => {
+    expect(parseInstanceName('octocat~hello-world')).toEqual({
+      owner: 'octocat',
+      repo: 'hello-world',
+    })
+    expect(parseInstanceName('me~a~b')).toEqual({ owner: 'me', repo: 'a~b' })
+  })
+
+  it('returns null when the delimiter or a side is missing', () => {
+    expect(parseInstanceName('noseparator')).toBeNull()
+    expect(parseInstanceName('~repo')).toBeNull()
+    expect(parseInstanceName('owner~')).toBeNull()
+    expect(parseInstanceName('')).toBeNull()
+  })
+})
 
 describe('parseAgentInstance', () => {
   it('parses owner~repo from the instance segment', () => {

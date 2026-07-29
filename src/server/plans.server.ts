@@ -97,6 +97,28 @@ export async function resolveAccessibleRepo(
   return { repo, installation }
 }
 
+/**
+ * Resolve a repo + its installation by owner/name WITHOUT a user scope. For use
+ * inside the Flue Durable Object, which is only reachable after the socket gate
+ * (`authorizeAgent`) has already verified the connecting user's access — so the
+ * DO needs the installation (to mint a token) but not a second user check.
+ */
+export async function findRepoContext(
+  db: Db,
+  owner: string,
+  name: string,
+): Promise<RepoContext | null> {
+  const repo = await db.query.repos.findFirst({
+    where: and(eq(repos.owner, owner), eq(repos.name, name)),
+  })
+  if (!repo) return null
+  const installation = await db.query.installations.findFirst({
+    where: eq(installations.id, repo.installationId),
+  })
+  if (!installation) return null
+  return { repo, installation }
+}
+
 function rowToSummary(row: PlanCacheRow): PlanSummary | null {
   const info = parsePlanPath(row.path)
   if (!info) return null
