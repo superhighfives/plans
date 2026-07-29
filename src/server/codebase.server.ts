@@ -25,16 +25,26 @@ export async function fetchContextFiles(
   entries: RepoTreeEntry[],
 ): Promise<CodebaseFile[]> {
   const shaByPath = new Map(entries.map((e) => [e.path, e.sha]))
+  const paths = selectContextPaths(entries.map((e) => e.path))
+
+  // Fetch the (few, curated) blobs in parallel — cold load is otherwise up to
+  // ~25 sequential GitHub round trips. Preserves selectContextPaths' order.
+  const fetched = await Promise.all(
+    paths.map(async (path): Promise<CodebaseFile | null> => {
+      const sha = shaByPath.get(path)
+      if (!sha) return null
+      return { path, text: await fetchBlobText(token, owner, repo, sha) }
+    }),
+  )
+
+  // Apply the per-file + total-size budget in order, once everything's in.
   const files: CodebaseFile[] = []
   let budget = MAX_TOTAL_BYTES
-  for (const path of selectContextPaths(entries.map((e) => e.path))) {
-    const sha = shaByPath.get(path)
-    if (!sha) continue
-    const text = await fetchBlobText(token, owner, repo, sha)
-    if (text.length > MAX_FILE_BYTES) continue
-    if (text.length > budget) break
-    files.push({ path, text })
-    budget -= text.length
+  for (const file of fetched) {
+    if (!file || file.text.length > MAX_FILE_BYTES) continue
+    if (file.text.length > budget) break
+    files.push(file)
+    budget -= file.text.length
   }
   return files
 }

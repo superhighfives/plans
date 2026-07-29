@@ -1,4 +1,6 @@
-export interface RepoRef {
+/** The repo an agent instance targets. Named distinctly from `plans/types`'
+ * `RepoRef` (a richer shape) to avoid importing the wrong one. */
+export interface InstanceRef {
   owner: string
   repo: string
 }
@@ -11,7 +13,7 @@ export interface RepoRef {
  * delimiter or either side is missing. Pure — used both by the request gate and
  * inside the Durable Object (which knows itself only by this name).
  */
-export function parseInstanceName(instance: string): RepoRef | null {
+export function parseInstanceName(instance: string): InstanceRef | null {
   const sep = instance.indexOf('~')
   if (sep === -1) return null
   const owner = instance.slice(0, sep)
@@ -29,7 +31,7 @@ export function parseInstanceName(instance: string): RepoRef | null {
  * empty owner/repo — so the caller can answer 400 without risking an unhandled
  * `URIError` (which would surface as a pre-auth 500).
  */
-export function parseAgentInstance(pathname: string): RepoRef | null {
+export function parseAgentInstance(pathname: string): InstanceRef | null {
   // ['agents', '<agent>', '<instance>', ...]
   const segment = pathname.split('/').filter(Boolean)[2]
   if (!segment) return null

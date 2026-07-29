@@ -40,40 +40,52 @@ export class FlueAgent extends Agent {
     const ref = parseInstanceName(this.name)
     if (!ref) return this.fail(connection, 'bad-instance')
 
-    const env = getEnv()
-    const db = getDb()
-    const ctx = await findRepoContext(db, ref.owner, ref.repo)
-    if (!ctx) return this.fail(connection, 'repo-not-found')
+    // Everything below can throw (revoked installation, GitHub rate limit, a
+    // blob 404ing between the tree read and the blob read). The base
+    // Agent.onError only console.errors, so without this the client would hang
+    // with no signal — route real failures through fail() too.
+    try {
+      const env = getEnv()
+      const db = getDb()
+      const ctx = await findRepoContext(db, ref.owner, ref.repo)
+      if (!ctx) return this.fail(connection, 'repo-not-found')
 
-    const token = await getInstallationToken(db, env, ctx.installation)
-    const tree = await fetchRepoTree(
-      token,
-      ctx.repo.owner,
-      ctx.repo.name,
-      ctx.repo.defaultBranch,
-    )
-
-    let files = this.readCache(tree.treeSha)
-    let cached = true
-    if (!files) {
-      cached = false
-      const fetched = await fetchContextFiles(
+      const token = await getInstallationToken(db, env, ctx.installation)
+      const tree = await fetchRepoTree(
         token,
         ctx.repo.owner,
         ctx.repo.name,
-        tree.entries,
+        ctx.repo.defaultBranch,
       )
-      files = this.writeCache(tree.treeSha, fetched)
-    }
 
-    connection.send(
-      JSON.stringify({
-        type: 'context',
-        treeSha: tree.treeSha,
-        cached,
-        files: files.map((f) => f.path),
-      }),
-    )
+      let files = this.readCache(tree.treeSha)
+      let cached = true
+      if (!files) {
+        cached = false
+        const fetched = await fetchContextFiles(
+          token,
+          ctx.repo.owner,
+          ctx.repo.name,
+          tree.entries,
+        )
+        files = this.writeCache(tree.treeSha, fetched)
+      }
+
+      connection.send(
+        JSON.stringify({
+          type: 'context',
+          treeSha: tree.treeSha,
+          cached,
+          // Surfaced so a very large (truncated) repo tree is a visible signal,
+          // not a silently-incomplete context set.
+          truncated: tree.truncated,
+          files: files.map((f) => f.path),
+        }),
+      )
+    } catch (err) {
+      console.error('Flue context load failed', err)
+      this.fail(connection, 'context-failed')
+    }
   }
 
   private fail(connection: Connection, error: string) {

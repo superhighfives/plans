@@ -218,7 +218,7 @@ function FluePing({ owner, repo }: { owner: string; repo: string }) {
         const msg = JSON.parse(typeof e.data === 'string' ? e.data : '{}')
         if (msg.type === 'context') {
           setStatus(
-            `read ${msg.files.length} context files${msg.cached ? ' (cached)' : ''}`,
+            `read ${msg.files.length} context files${msg.cached ? ' (cached)' : ''}${msg.truncated ? ' · repo tree truncated' : ''}`,
           )
         } else if (msg.type === 'error') {
           setStatus(`error: ${msg.error}`)
