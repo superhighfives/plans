@@ -45,14 +45,18 @@ Deploy is **manual / dispatch**, not per-push: the `deploy:preview` script plus 
 4. Set preview secrets: `wrangler secret put <NAME> --env preview` for the GitHub App set + `SESSION_SECRET`, `TOKEN_ENCRYPTION_KEY`, `CF_AI_GATEWAY_ID`, and `APP_URL=https://plans-preview.superhighfives.com`.
 5. `npm run deploy:preview`.
 
+## Status
+
+Preview is **live** at `plans-preview.superhighfives.com` (deployed from `flue-agent`). Verified: root serves 200, the `/agents/*` auth gate returns 401 with no session — both through the isolated preview Worker (own DO + `plans-preview` D1). The only remaining step is registering the OAuth callback so login works.
+
 ## Tasks
 
-- [ ] `env.preview` in `wrangler.jsonc` (name `plans-preview`, own domain, redeclared bindings + migrations).
-- [ ] `deploy:preview` npm script + `preview-deploy.yml` (`workflow_dispatch`, deploys the chosen branch).
-- [ ] Create the preview D1 + apply migrations (account-side).
-- [ ] Register the preview OAuth callback on the GitHub App.
-- [ ] Set preview secrets + `APP_URL`.
-- [ ] Deploy `flue-agent` to preview; confirm login + the Flue echo work on the live URL.
+- [x] `env.preview` in `wrangler.jsonc` (name `plans-preview`, own domain, redeclared bindings + migrations).
+- [x] `deploy:preview` npm script + `preview-deploy.yml` (`workflow_dispatch`, deploys the chosen branch).
+- [x] Create the preview D1 (`ea4b9f18…`) + apply migrations.
+- [x] Set preview secrets + `APP_URL` (reused prod values from `.dev.vars`; `APP_URL` → preview origin).
+- [x] Deploy `flue-agent` to preview; confirmed root 200 + agent gate 401 live.
+- [ ] **Register the preview OAuth callback on the GitHub App** (`https://plans-preview.superhighfives.com/api/auth/github/callback`) — then log in and confirm the Flue echo end to end.
 
 ## Open questions
 
