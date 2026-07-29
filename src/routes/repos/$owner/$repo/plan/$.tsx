@@ -205,9 +205,10 @@ function PlanMoveControl({
         data: { owner, repo, path, toState, context },
       })
       setPreview(result)
-    } catch {
+    } catch (err) {
+      const detail = err instanceof Error ? err.message : String(err)
       setError(
-        "Couldn't draft the move. The AI Gateway may not be configured, or the request failed — try again.",
+        `Couldn't draft the move. The AI Gateway may not be configured, or the request failed — try again. (${detail})`,
       )
     } finally {
       setDrafting(null)
