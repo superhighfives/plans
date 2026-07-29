@@ -53,7 +53,7 @@
         {
           "binding": "DB",
           "database_name": "plans-preview",
-          "database_id": "REPLACE_WITH_PREVIEW_D1_ID",
+          "database_id": "ea4b9f18-e4e8-4cc9-8839-d708a3ee088b",
           "migrations_dir": "migrations"
         }
       ],
