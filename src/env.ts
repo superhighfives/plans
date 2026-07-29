@@ -1,5 +1,9 @@
 import { env as cfEnv } from 'cloudflare:workers'
-import type { Ai, D1Database } from '@cloudflare/workers-types'
+import type {
+  Ai,
+  D1Database,
+  DurableObjectNamespace,
+} from '@cloudflare/workers-types'
 
 /**
  * Typed view of the Worker's bindings + secrets.
@@ -15,6 +19,9 @@ export interface AppEnv {
 
   /** Workers AI binding — used for Claude calls routed through the AI Gateway. */
   AI: Ai
+
+  /** Flue conversational agent — one Durable Object instance per repo. */
+  FlueAgent: DurableObjectNamespace
 
   /** GitHub App numeric id. */
   GITHUB_APP_ID: string

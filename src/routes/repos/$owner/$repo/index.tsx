@@ -1,6 +1,7 @@
 import { createFileRoute, Link, useRouter } from '@tanstack/react-router'
 import { useServerFn } from '@tanstack/react-start'
-import { useState } from 'react'
+import { useAgent } from 'agents/react'
+import { useEffect, useState } from 'react'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import type { PlanChange } from '~/lib/plans/diff'
@@ -201,6 +202,41 @@ function RepoPage() {
 }
 
 /**
+ * Slice-1 connectivity check for the Flue agent: open a WebSocket to this repo's
+ * agent instance, send a ping once connected, and show the echo. Proves the
+ * transport + auth gate end to end. Replaced by the real conversation UI in a
+ * later slice.
+ */
+function FluePing({ owner, repo }: { owner: string; repo: string }) {
+  const [echo, setEcho] = useState<string | null>(null)
+  const [error, setError] = useState(false)
+  const flue = useAgent({
+    agent: 'flue-agent',
+    name: `${owner}~${repo}`,
+    onMessage: (e) => setEcho(typeof e.data === 'string' ? e.data : ''),
+    onError: () => setError(true),
+  })
+
+  useEffect(() => {
+    let cancelled = false
+    flue.ready
+      .then(() => {
+        if (!cancelled) flue.send(JSON.stringify({ type: 'ping' }))
+      })
+      .catch(() => setError(true))
+    return () => {
+      cancelled = true
+    }
+  }, [flue])
+
+  return (
+    <p className="muted" style={{ fontSize: 13 }}>
+      Flue: {error ? 'offline' : echo ? `online · echo ${echo}` : 'connecting…'}
+    </p>
+  )
+}
+
+/**
  * Draft a new backlog item with AI. The user types a rough idea, Claude proposes
  * a title + body, and the rendered plan is shown for approval before anything is
  * committed into plans/backlog/ (mirrors the Phase 3 move preview path).
@@ -316,6 +352,7 @@ function NewBacklogItem({
   return (
     <div className="move">
       <h2 className="move__title">New backlog item</h2>
+      <FluePing owner={owner} repo={repo} />
       <p className="move__hint">
         Describe a rough idea. Claude drafts a backlog entry — with a title and
         a sketch — then shows it to you before anything is committed.

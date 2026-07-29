@@ -3,7 +3,7 @@
   "name": "plans",
   "compatibility_date": "2025-09-02",
   "compatibility_flags": ["nodejs_compat"],
-  "main": "@tanstack/react-start/server-entry",
+  "main": "./src/server.ts",
   "observability": {
     "enabled": true
   },
@@ -23,10 +23,45 @@
   // gateway token or Anthropic key is needed. `remote: true` because Workers AI
   // has no local emulation — dev must proxy to the real API (see remoteBindings
   // in vite.config.ts, which authenticates via wrangler login / CLOUDFLARE_*).
-  "ai": { "binding": "AI", "remote": true }
+  "ai": { "binding": "AI", "remote": true },
+  // Flue conversational agent — one Durable Object instance per repo. Agents
+  // SDK requires SQLite-backed DOs (new_sqlite_classes).
+  "durable_objects": {
+    "bindings": [{ "name": "FlueAgent", "class_name": "FlueAgent" }]
+  },
+  "migrations": [{ "tag": "v1", "new_sqlite_classes": ["FlueAgent"] }],
   // Secrets (set with `wrangler secret put <NAME>` for production, or in
   // `.dev.vars` for local dev — see .dev.vars.example):
   //   GITHUB_APP_ID, GITHUB_APP_CLIENT_ID, GITHUB_APP_CLIENT_SECRET,
   //   GITHUB_APP_PRIVATE_KEY, GITHUB_WEBHOOK_SECRET,
   //   SESSION_SECRET, TOKEN_ENCRYPTION_KEY, APP_URL, CF_AI_GATEWAY_ID
+  //
+  // Stable preview environment (`wrangler deploy --env preview`, or
+  // `npm run deploy:preview`) → the `plans-preview` Worker on its own domain,
+  // with isolated D1 + DO namespace so any branch can be reviewed live without
+  // touching prod. See plans/ready/branch-preview-deploys.md. Named
+  // environments do NOT inherit bindings, so they're all redeclared here.
+  // One-time: create the D1 (`wrangler d1 create plans-preview`), paste its id
+  // below, register the preview OAuth callback, and set `--env preview` secrets.
+  "env": {
+    "preview": {
+      "name": "plans-preview",
+      "routes": [
+        { "pattern": "plans-preview.superhighfives.com", "custom_domain": true }
+      ],
+      "d1_databases": [
+        {
+          "binding": "DB",
+          "database_name": "plans-preview",
+          "database_id": "ea4b9f18-e4e8-4cc9-8839-d708a3ee088b",
+          "migrations_dir": "migrations"
+        }
+      ],
+      "ai": { "binding": "AI", "remote": true },
+      "durable_objects": {
+        "bindings": [{ "name": "FlueAgent", "class_name": "FlueAgent" }]
+      },
+      "migrations": [{ "tag": "v1", "new_sqlite_classes": ["FlueAgent"] }]
+    }
+  }
 }

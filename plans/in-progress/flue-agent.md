@@ -1,6 +1,6 @@
 ---
 title: Flue agent — codebase-aware, conversational plan authoring
-status: Ready
+status: In Progress
 created: 2026-07-28
 updated: 2026-07-28
 ---
@@ -19,6 +19,21 @@ The shipped CMS (Phases 0–4, `plans/done/plans-cms.md`) authors plans as **one
 - **No back-and-forth.** Ambiguous ideas get a guess or an open question; the model can't ask *me* and fold the answer in before drafting.
 
 This is also the CMS's first **stateful/agentic** feature. It reuses two things wholesale: the **Workers AI binding** transport (`env.AI.run("anthropic/…", …, { gateway })`, tool-calling included — new-backlog's forced tool-use already works live) and the **rich preview-and-commit path** (`commitPlanMove` / `commitNewBacklog`, App-authored, audited, base-SHA guarded). Flue adds repo context and a conversation *in front of* that path; it does not change the write path.
+
+## Progress
+
+**Slice 1 — agent scaffold + WebSocket round-trip: DONE.**
+- `src/agents/flue-agent.ts` — `FlueAgent extends Agent` (Agents SDK); echoes messages (no AI yet).
+- `src/server.ts` — **custom Worker entry**: auth-gates `/agents/*`, hands off to `routeAgentRequest`, delegates everything else to the Start handler, and re-exports `FlueAgent`.
+- **Auth gate** (`authorizeAgent`): the instance name is `owner~repo` (`~` is illegal in GitHub owner/repo names → unambiguous, slash-free); the gate re-checks `readSession` → `getUserById` → `resolveAccessibleRepo` so the client-chosen name is **not** the boundary. Missing/invalid session → 401; no repo access → 403; malformed instance → 400.
+- `wrangler.jsonc` — `main` → `./src/server.ts`; `FlueAgent` DO binding + `new_sqlite_classes` migration `v1`; `env.ts` gains the `FlueAgent` namespace.
+- Client: `FluePing` (`useAgent`) in the create panel opens the socket, pings, and shows the echo.
+
+**Verified.** Build emits `FlueAgent` from `dist/server/index.js` + the DO class into the built `wrangler.json`. Runtime (dev): `/agents/flue-agent/foo~bar` → 401 (no session), `…/badinstance` → 400, `/` → 200 (app still serves). typecheck + tests + biome green.
+
+**Deviation from the spec's integration note:** exporting a DO requires the Worker's `main` to *be* our file, so `main` is now `./src/server.ts` (it calls `createStartHandler(defaultStreamHandler)` itself). `tanstackStart({ server: { entry } })` only swaps Start's *internal* handler — confirmed (by grepping the bundle) it does **not** surface the DO export.
+
+**Next: slice 2 — codebase context v1** (tree + curated files via the installation token; SHA-keyed cache in `this.sql`; fed into the prompts).
 
 ## Approach
 

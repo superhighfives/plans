@@ -1,0 +1,56 @@
+name: Deploy preview
+
+# Manually deploy the selected branch to the stable `plans-preview` environment
+# (plans-preview.superhighfives.com) so a feature can be exercised + reviewed
+# live without touching production. Pick the branch in the "Run workflow" UI.
+# See plans/ready/branch-preview-deploys.md.
+#
+# The env is chosen at BUILD time via CLOUDFLARE_ENV (the vite plugin bakes a
+# single resolved config into dist), so the build runs with CLOUDFLARE_ENV=preview
+# and the deploy just ships that build. Config commands (d1/secret) instead read
+# the source wrangler.jsonc, so they use `--env preview`.
+on:
+  workflow_dispatch:
+
+concurrency:
+  # Separate from production; one preview target, so serialize preview deploys.
+  group: deploy-preview
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  deploy:
+    name: migrate · deploy (preview)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build (preview env)
+        run: npm run build
+        env:
+          CLOUDFLARE_ENV: preview
+
+      - name: Apply D1 migrations (preview)
+        uses: cloudflare/wrangler-action@v3
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          command: d1 migrations apply plans-preview --remote --env preview
+
+      - name: Deploy (preview)
+        uses: cloudflare/wrangler-action@v3
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          command: deploy
