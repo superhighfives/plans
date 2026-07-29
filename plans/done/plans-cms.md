@@ -1,27 +1,31 @@
 ---
 title: Planning CMS
-status: Ready
+status: Complete
 created: 2026-07-19
-updated: 2026-07-26
+updated: 2026-07-28
 ---
 
 ## Goal
 
-A multi-tenant web app on Cloudflare that reads the `plans/` directories across a user's GitHub repos (the ones that use the [`plans`](../../skills/plans/SKILL.md) skill) and lets them browse, edit, move, and converse with each repo's plans — with AI assistance and every change written back as a git commit. Built product-shaped, shipped in thin phases starting with a read-only reader.
+A multi-tenant web app on Cloudflare that reads the `plans/` directories across a user's GitHub repos (the ones that use the [`plans`](../../skills/plans/SKILL.md) skill) and lets them browse, edit, and move each repo's plans — with AI assistance and every change written back as a git commit. Built product-shaped, shipped in thin phases starting with a read-only reader. (The conversational-agent and multi-user phases became their own plans — see the Overview.)
 
-## Current status (2026-07-26)
+## Overview
 
-**Phases 0–4 are shipped and merged** (Phases 2–3 in PR #10, Phase 4 in PR #12). The app can: log in, list repos with `plans/`, browse plans by state, render a plan, **hand-edit** a plan and commit it back (Editor/Preview toggle, base-SHA conflict guard), **move** a plan between states with Claude drafting the rewrite through Cloudflare AI Gateway → diff preview → atomic move-and-update commit, and **create a new backlog item** from a rough idea (Claude proposes a title + body → rendered preview → App-authored commit into `plans/backlog/`).
+**Phases 0–4 shipped and merged** (Phases 2–3 in PR #10, Phase 4 in PR #12); AI authoring is verified working live. The CMS can: log in with GitHub, list installations and the repos that have a `plans/` folder, browse plans by state, render a plan, **hand-edit** a plan and commit it back (Editor/Preview toggle, base-SHA conflict guard), **move** a plan between states with Claude drafting the rewrite (rich diff preview, **editable before commit**, atomic move-and-update commit), and **create a new backlog item** from a rough idea (Claude proposes a title + body → preview → App-authored commit into `plans/backlog/`). Every mutation is one bot-authored commit with an audit-log row.
 
-**Next up: Phase 5** — Flue chat (agentic): a per-repo conversation in a Cloudflare sandbox with an ephemeral clone, session state in a Durable Object, and agent-proposed edits flowing through the same rich-preview-and-commit path. A much larger lift (sandbox, Durable Object, Workflows) than Phases 2–4.
+The two remaining phases were split into their own plans as this work wrapped — this plan now covers the reader/editor/AI CMS only:
+- **Phase 5 → `plans/backlog/flue-agent.md`** — a codebase-aware conversational agent (Flue) that grounds authoring in the actual repo and can ask clarifying questions during create/move.
+- **Phase 6 → `plans/backlog/multi-user-and-launch.md`** — quotas, rate limits, audit UI, org/team, and getting it live beyond a single user.
 
-Key new code from Phase 4: `buildNewBacklogPrompt` + `NEW_BACKLOG_TOOL` in `src/lib/ai/plan-prompts.ts` (structured title+body via forced tool-use), `completeStructured` in `src/lib/ai/gateway.ts`, `src/lib/plans/slug.ts` (kebab-case slug + dedupe), `proposeNewBacklog`/`commitNewBacklog` in `src/server/plans.server.ts`, their RPCs in `src/server/repo.functions.ts`, and the `NewBacklogItem` panel on the repo board (`src/routes/repos/$owner/$repo/index.tsx`).
+### Runtime config the deployment needs (operational)
+- GitHub App must have **Contents: read & write** granted *and the installation must have accepted it*.
+- Claude runs through the **Workers AI binding** (`ai` in `wrangler.jsonc`), routed via the AI Gateway named in **`CF_AI_GATEWAY_ID`**. Auth + **Unified Billing** ride on the Cloudflare account — no `cf-aig-authorization` token or Anthropic key in the app. Local dev has no Workers-AI emulation: the binding is `remote: true` and needs `wrangler login` / `CLOUDFLARE_API_TOKEN`, so exercise AI features against prod (or a preview deploy), not `npm run dev`.
 
-**Runtime config the deployment needs for the AI/edit features to work live** (code is done; these are operational):
-- GitHub App must have **Contents: read & write** granted *and the installation must have accepted it* (Phase 2/3 writes).
-- An **authenticated** Cloudflare AI Gateway with **Unified Billing** credits (or a stored BYOK key), plus the three secrets `CF_AI_GATEWAY_ACCOUNT_ID`, `CF_AI_GATEWAY_ID`, `CF_AI_GATEWAY_TOKEN` (local: `.dev.vars`; prod: `wrangler secret put`). No Anthropic key is used — the app authenticates to the gateway via `cf-aig-authorization`.
+### Architecture (as built)
 
-Key new code from Phases 2–3: `src/lib/ai/` (gateway client + move prompts), `src/lib/github/write.ts` (`putFile` + `createCommit`), the write/move logic in `src/server/plans.server.ts`, its RPCs in `src/server/repo.functions.ts`, and the editor + move UI in `src/routes/repos/$owner/$repo/plan/$.tsx`.
+The design below (Context, Decisions, Approach, Data model) is the as-built record. Key code: `src/lib/ai/` (gateway + prompts), `src/lib/github/write.ts` (`putFile` + `createCommit`), `src/lib/plans/slug.ts`, the write/move/create logic in `src/server/plans.server.ts`, its RPCs in `src/server/repo.functions.ts`, and the editor/move/new-item UI in `src/routes/repos/$owner/$repo/`.
+
+**Notable deviation — AI transport.** The plan assumed the app would authenticate to the AI Gateway directly via `cf-aig-authorization` with account-id/gateway/token secrets (Anthropic SDK pointed at the gateway's compat endpoint). That path 401'd on a placeholder key, and a follow-on attempt hit a detached-method crash. The shipped design instead calls Claude through the **Workers AI binding** with provider routing — `env.AI.run("anthropic/…", { messages, max_tokens, system }, { gateway: { id } })` — which drops the `@anthropic-ai/sdk` dependency and every gateway token: the Worker's own account + Unified Billing handle auth. The move/new-item prompts and the deterministic server-side frontmatter are otherwise as planned.
 
 ## Context
 
@@ -112,9 +116,7 @@ Secrets (installation tokens, any cached credentials) encrypted at rest with a k
 
 **Phase 4 — AI-assisted new backlog items.** "New backlog item" flow: user gives a rough idea, Claude fleshes it into a backlog entry (template, `status: Backlog`), preview, approve, commit into `plans/backlog/`.
 
-**Phase 5 — Flue chat (agentic).** Per-repo conversation grounded in the codebase and its `plans/` folder. A Flue agent runs in a Cloudflare sandbox with an ephemeral clone of the repo ("artefact"); session state persists in a Durable Object so conversations resume. **Agentic from the start:** the agent can propose edits that flow through the same rich-preview-and-commit path as Phase 3, so nothing lands without approval. Long runs go through Workflows.
-
-**Phase 6 — Multi-user hardening.** Rate limits, per-user AI quotas, org/team niceties, an audit UI, and polish. Clerk is intentionally **not** in scope — GitHub-App auth is expected to be enough — but the session layer stays swappable in case that changes.
+**Phases 5 & 6 were split into their own plans** as the CMS work wrapped — see `plans/backlog/flue-agent.md` (the conversational, codebase-aware Flue agent) and `plans/backlog/multi-user-and-launch.md` (quotas, rate limits, org/team, audit UI, launch).
 
 ## Tasks
 
@@ -123,6 +125,5 @@ Secrets (installation tokens, any cached credentials) encrypted at rest with a k
 - [x] **Phase 2:** raw-markdown editor on the plan view; App-authored direct-commit write path (Contents API PUT — one atomic commit per edit; the Git Data API is reserved for Phase 3 moves, which touch two paths); base-SHA conflict handling (stale sha → conflict, no clobber); templated commit message (`plans: update <title>`); cache refresh + audit-log row on success.
 - [x] **Phase 3:** explicit move control + context textarea; Claude (`claude-opus-4-8`) move/update prompts per transition, run through **Cloudflare AI Gateway** (unified billing); open-questions warn-and-override when promoting to `ready`; rich preview/diff; atomic move-and-update commit via the Git Data API (blob→tree→commit→ref, non-forced), base-SHA guarded; frontmatter `status` + `updated` set deterministically server-side (the model only rewrites the body).
 - [x] **Phase 4:** new-backlog-item flow — rough idea → Claude proposes a title + rough body via forced tool-use (`completeStructured` + `NEW_BACKLOG_TOOL`); deterministic kebab-case filename (`slugify` + `uniqueSlug`, deduped within `backlog/`); frontmatter (`status: Backlog`, `created`/`updated` today) attached server-side; rendered preview; create-only `putFile` commit (422 → "already exists" guard); audit-log `plan.create` row + cache seed.
-- [ ] **Phase 5:** Flue agent in a sandbox with ephemeral clone; Durable Object session persistence; agentic edits through the preview path; Workflows for long runs.
-- [ ] **Phase 6:** AI quotas + rate limits; org/team support; audit UI; polish.
-- [x] **Cross-cutting (partial):** AI Gateway client (unified-billing auth via `cf-aig-authorization`) + secrets wired; tests for the GitHub read/write path (`fetchContentFile`, `putFile`, `createCommit`), the move prompts, and the gateway client. *Still open:* per-repo error/empty/loading polish and broader server-orchestration test coverage (no D1/token test harness exists yet).
+- **Phase 5 & 6 split into their own plans** — `plans/backlog/flue-agent.md`, `plans/backlog/multi-user-and-launch.md`.
+- [x] **Cross-cutting:** Claude via the **Workers AI binding** (provider routing + Unified Billing, no gateway token); tests for the GitHub read/write path (`fetchContentFile`, `putFile`, `createCommit`), the move/new-item prompts, slug helpers, and the gateway wrapper. *Carried into Phase 6:* per-repo error/empty/loading polish and broader server-orchestration test coverage (no D1/token test harness exists yet).
