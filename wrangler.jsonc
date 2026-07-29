@@ -3,7 +3,7 @@
   "name": "plans",
   "compatibility_date": "2025-09-02",
   "compatibility_flags": ["nodejs_compat"],
-  "main": "@tanstack/react-start/server-entry",
+  "main": "./src/server.ts",
   "observability": {
     "enabled": true
   },
@@ -23,7 +23,13 @@
   // gateway token or Anthropic key is needed. `remote: true` because Workers AI
   // has no local emulation — dev must proxy to the real API (see remoteBindings
   // in vite.config.ts, which authenticates via wrangler login / CLOUDFLARE_*).
-  "ai": { "binding": "AI", "remote": true }
+  "ai": { "binding": "AI", "remote": true },
+  // Flue conversational agent — one Durable Object instance per repo. Agents
+  // SDK requires SQLite-backed DOs (new_sqlite_classes).
+  "durable_objects": {
+    "bindings": [{ "name": "FlueAgent", "class_name": "FlueAgent" }]
+  },
+  "migrations": [{ "tag": "v1", "new_sqlite_classes": ["FlueAgent"] }]
   // Secrets (set with `wrangler secret put <NAME>` for production, or in
   // `.dev.vars` for local dev — see .dev.vars.example):
   //   GITHUB_APP_ID, GITHUB_APP_CLIENT_ID, GITHUB_APP_CLIENT_SECRET,

@@ -20,6 +20,18 @@ The shipped CMS (Phases 0–4, `plans/done/plans-cms.md`) authors plans as **one
 
 This is also the CMS's first **stateful/agentic** feature. It reuses two things wholesale: the **Workers AI binding** transport (`env.AI.run("anthropic/…", …, { gateway })`, tool-calling included — new-backlog's forced tool-use already works live) and the **rich preview-and-commit path** (`commitPlanMove` / `commitNewBacklog`, App-authored, audited, base-SHA guarded). Flue adds repo context and a conversation *in front of* that path; it does not change the write path.
 
+## Progress
+
+**Slice 1 — agent scaffold + integration (server side): done and building.**
+- `src/agents/flue-agent.ts` — `FlueAgent extends Agent` (Agents SDK), slice-1 echo over the WebSocket.
+- `src/server.ts` — **custom Worker entry**: routes `/agents/*` → `routeAgentRequest`, else delegates to the Start handler, and re-exports `FlueAgent`.
+- `wrangler.jsonc` — DO binding `FlueAgent` + `new_sqlite_classes` migration `v1`; `env.ts` gains the `FlueAgent` namespace.
+- **Deviation from the spec's integration note:** exporting a DO needs the Worker's `main` to *be* our file, so `main` is now `./src/server.ts` (which calls `createStartHandler(defaultStreamHandler)` itself). The `tanstackStart({ server: { entry } })` option only swaps Start's *internal* handler, not the Worker `main`, so it does **not** surface the DO export — confirmed by inspecting the built bundle. Verified: `npm run build` emits `FlueAgent` from `dist/server/index.js` and the DO class into the built `wrangler.json`; typecheck + tests + biome green.
+
+**Immediate next (rest of slice 1):**
+- ⚠️ **Auth gate before deploy.** `/agents/*` is currently unauthenticated — it must enforce the session + user→installation repo-access check (as `resolveAccessibleRepo` does) on the socket upgrade *before* `routeAgentRequest`. Do **not** deploy the agent endpoint until this lands.
+- Client `useAgent` round-trip from the create panel (prove the echo end to end).
+
 ## Approach
 
 ### Decisions (resolving the backlog open questions)
