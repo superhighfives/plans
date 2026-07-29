@@ -34,7 +34,6 @@ describe('completeText', () => {
     expect(run).toHaveBeenCalledWith(
       PLAN_MODEL,
       expect.objectContaining({
-        thinking: { type: 'adaptive' },
         system: 'sys',
         messages: [{ role: 'user', content: 'go' }],
       }),

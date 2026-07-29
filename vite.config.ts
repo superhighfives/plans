@@ -9,7 +9,9 @@ export default defineConfig({
   resolve: { tsconfigPaths: true },
   plugins: [
     // The Cloudflare plugin wires the Workers runtime + bindings into Vite.
-    cloudflare({ viteEnvironment: { name: 'ssr' } }),
+    // `remoteBindings` lets bindings marked `remote: true` (the AI binding —
+    // Workers AI has no local emulation) proxy to the real Cloudflare API in dev.
+    cloudflare({ viteEnvironment: { name: 'ssr' }, remoteBindings: true }),
     // MUST come before viteReact().
     tanstackStart(),
     viteReact(),

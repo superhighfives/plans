@@ -59,19 +59,25 @@ function runMessages(
   env: AppEnv,
   input: Record<string, unknown>,
 ): Promise<MessageResponse> {
-  const run = env.AI.run as unknown as (
-    model: string,
-    input: Record<string, unknown>,
-    options: { gateway: { id: string } },
-  ) => Promise<MessageResponse>
-  return run(PLAN_MODEL, input, { gateway: { id: env.CF_AI_GATEWAY_ID } })
+  // Call `.run` as a METHOD on the binding — not a detached reference. The
+  // binding's internal run() does `this.#options = options` on its first line,
+  // so a bare `run()` (losing `this`) throws "Cannot set properties of undefined".
+  const ai = env.AI as unknown as {
+    run(
+      model: string,
+      input: Record<string, unknown>,
+      options: { gateway: { id: string } },
+    ): Promise<MessageResponse>
+  }
+  return ai.run(PLAN_MODEL, input, { gateway: { id: env.CF_AI_GATEWAY_ID } })
 }
 
 /**
- * Run a single-shot completion and return the concatenated text. Adaptive
- * thinking is on (Opus 4.8 runs without it unless asked); we read only the
- * `text` blocks, so any thinking blocks are ignored. `max_tokens` stays under
- * the non-streaming timeout ceiling — plans are a few thousand tokens at most.
+ * Run a single-shot completion and return the concatenated text. The input is
+ * the provider-routing Messages schema (`system` + `messages` + `max_tokens`);
+ * the response is Anthropic-native, so we read its `text` content blocks.
+ * `max_tokens` stays under the non-streaming timeout ceiling — plans are a few
+ * thousand tokens at most.
  */
 export async function completeText(
   env: AppEnv,
@@ -80,7 +86,6 @@ export async function completeText(
   assertConfigured(env)
   const res = await runMessages(env, {
     max_tokens: params.maxTokens ?? 16000,
-    thinking: { type: 'adaptive' },
     system: params.system,
     messages: [{ role: 'user', content: params.prompt }],
   })
