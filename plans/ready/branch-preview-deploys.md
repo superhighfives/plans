@@ -42,7 +42,9 @@ Deploy is **manual / dispatch**, not per-push: the `deploy:preview` script plus 
 1. `wrangler d1 create plans-preview` → paste the id into `env.preview.d1_databases[0].database_id` (replacing `REPLACE_WITH_PREVIEW_D1_ID`).
 2. `wrangler d1 migrations apply plans-preview --remote --env preview`.
 3. Register the preview OAuth callback on the GitHub App: `https://plans-preview.superhighfives.com/api/auth/github/callback` (callback URLs are a list, so the same App works for prod + preview).
-4. Set preview secrets: `wrangler secret put <NAME> --env preview` for the GitHub App set + `SESSION_SECRET`, `TOKEN_ENCRYPTION_KEY`, `CF_AI_GATEWAY_ID`, and `APP_URL=https://plans-preview.superhighfives.com`.
+4. Set preview secrets: `wrangler secret put <NAME> --env preview`.
+   - **`SESSION_SECRET` and `TOKEN_ENCRYPTION_KEY` MUST be freshly generated — never shared with prod.** Session cookies are signed with only `{uid, login, iat}` (no environment/audience binding), so a secret leaked from preview — which runs arbitrary in-progress branch code, a materially weaker trust boundary — lets anyone forge a valid *prod* session (or decrypt real users' GitHub tokens). Generate distinct values (`openssl rand -base64 48` / `... 32`).
+   - The GitHub App creds + `CF_AI_GATEWAY_ID` can be shared (same App / gateway). Set `APP_URL=https://plans-preview.superhighfives.com`.
 5. `npm run deploy:preview`.
 
 ## Status
@@ -54,9 +56,10 @@ Preview is **live** at `plans-preview.superhighfives.com` (deployed from `flue-a
 - [x] `env.preview` in `wrangler.jsonc` (name `plans-preview`, own domain, redeclared bindings + migrations).
 - [x] `deploy:preview` npm script + `preview-deploy.yml` (`workflow_dispatch`, deploys the chosen branch).
 - [x] Create the preview D1 (`ea4b9f18…`) + apply migrations.
-- [x] Set preview secrets + `APP_URL` (reused prod values from `.dev.vars`; `APP_URL` → preview origin).
+- [x] Set preview secrets + `APP_URL` → preview origin. **`SESSION_SECRET` + `TOKEN_ENCRYPTION_KEY` are now distinct from prod** (freshly generated; the initial reuse-from-`.dev.vars` was a cross-env auth-bypass risk and was replaced). GitHub App creds + `CF_AI_GATEWAY_ID` shared.
 - [x] Deploy `flue-agent` to preview; confirmed root 200 + agent gate 401 live.
 - [ ] **Register the preview OAuth callback on the GitHub App** (`https://plans-preview.superhighfives.com/api/auth/github/callback`) — then log in and confirm the Flue echo end to end.
+- [ ] **Rotate prod `SESSION_SECRET` + `TOKEN_ENCRYPTION_KEY`** before pointing real users at preview — they were briefly stored on the preview Worker during the initial (now-corrected) setup, so prod's copies should be considered exposed to the weaker environment. Low-impact on a solo app (logs you out; cached installation tokens re-mint).
 
 ## Open questions
 

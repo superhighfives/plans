@@ -9,6 +9,7 @@ import { getEnv } from '~/env'
 import { resolveAccessibleRepo } from '~/server/plans.server'
 import { readSession } from '~/server/session'
 import { getUserById } from '~/server/users.server'
+import { parseAgentInstance } from './agents/instance'
 
 // The Durable Object class must be a named export of the Worker entry so the
 // runtime can bind it. Re-exported here (this file is the Worker `main`) rather
@@ -26,14 +27,8 @@ const handleStart = createStartHandler(defaultStreamHandler)
  * to short-circuit, or null to allow the request through.
  */
 async function authorizeAgent(request: Request): Promise<Response | null> {
-  const segments = new URL(request.url).pathname.split('/').filter(Boolean)
-  // ['agents', '<agent>', '<instance>', ...]
-  const instance = decodeURIComponent(segments[2] ?? '')
-  const sep = instance.indexOf('~')
-  const owner = sep === -1 ? '' : instance.slice(0, sep)
-  const repo = sep === -1 ? '' : instance.slice(sep + 1)
-  if (!owner || !repo)
-    return new Response('Bad agent instance', { status: 400 })
+  const target = parseAgentInstance(new URL(request.url).pathname)
+  if (!target) return new Response('Bad agent instance', { status: 400 })
 
   const env = getEnv()
   const session = await readSession(env, request.headers.get('cookie'))
@@ -43,7 +38,12 @@ async function authorizeAgent(request: Request): Promise<Response | null> {
   const user = await getUserById(db, session.uid)
   if (!user) return new Response('Unauthorized', { status: 401 })
 
-  const ctx = await resolveAccessibleRepo(db, user.id, owner, repo)
+  const ctx = await resolveAccessibleRepo(
+    db,
+    user.id,
+    target.owner,
+    target.repo,
+  )
   if (!ctx) return new Response('Forbidden', { status: 403 })
   return null
 }
