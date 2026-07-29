@@ -22,15 +22,18 @@ This is also the CMS's first **stateful/agentic** feature. It reuses two things 
 
 ## Progress
 
-**Slice 1 — agent scaffold + integration (server side): done and building.**
-- `src/agents/flue-agent.ts` — `FlueAgent extends Agent` (Agents SDK), slice-1 echo over the WebSocket.
-- `src/server.ts` — **custom Worker entry**: routes `/agents/*` → `routeAgentRequest`, else delegates to the Start handler, and re-exports `FlueAgent`.
-- `wrangler.jsonc` — DO binding `FlueAgent` + `new_sqlite_classes` migration `v1`; `env.ts` gains the `FlueAgent` namespace.
-- **Deviation from the spec's integration note:** exporting a DO needs the Worker's `main` to *be* our file, so `main` is now `./src/server.ts` (which calls `createStartHandler(defaultStreamHandler)` itself). The `tanstackStart({ server: { entry } })` option only swaps Start's *internal* handler, not the Worker `main`, so it does **not** surface the DO export — confirmed by inspecting the built bundle. Verified: `npm run build` emits `FlueAgent` from `dist/server/index.js` and the DO class into the built `wrangler.json`; typecheck + tests + biome green.
+**Slice 1 — agent scaffold + WebSocket round-trip: DONE.**
+- `src/agents/flue-agent.ts` — `FlueAgent extends Agent` (Agents SDK); echoes messages (no AI yet).
+- `src/server.ts` — **custom Worker entry**: auth-gates `/agents/*`, hands off to `routeAgentRequest`, delegates everything else to the Start handler, and re-exports `FlueAgent`.
+- **Auth gate** (`authorizeAgent`): the instance name is `owner~repo` (`~` is illegal in GitHub owner/repo names → unambiguous, slash-free); the gate re-checks `readSession` → `getUserById` → `resolveAccessibleRepo` so the client-chosen name is **not** the boundary. Missing/invalid session → 401; no repo access → 403; malformed instance → 400.
+- `wrangler.jsonc` — `main` → `./src/server.ts`; `FlueAgent` DO binding + `new_sqlite_classes` migration `v1`; `env.ts` gains the `FlueAgent` namespace.
+- Client: `FluePing` (`useAgent`) in the create panel opens the socket, pings, and shows the echo.
 
-**Immediate next (rest of slice 1):**
-- ⚠️ **Auth gate before deploy.** `/agents/*` is currently unauthenticated — it must enforce the session + user→installation repo-access check (as `resolveAccessibleRepo` does) on the socket upgrade *before* `routeAgentRequest`. Do **not** deploy the agent endpoint until this lands.
-- Client `useAgent` round-trip from the create panel (prove the echo end to end).
+**Verified.** Build emits `FlueAgent` from `dist/server/index.js` + the DO class into the built `wrangler.json`. Runtime (dev): `/agents/flue-agent/foo~bar` → 401 (no session), `…/badinstance` → 400, `/` → 200 (app still serves). typecheck + tests + biome green.
+
+**Deviation from the spec's integration note:** exporting a DO requires the Worker's `main` to *be* our file, so `main` is now `./src/server.ts` (it calls `createStartHandler(defaultStreamHandler)` itself). `tanstackStart({ server: { entry } })` only swaps Start's *internal* handler — confirmed (by grepping the bundle) it does **not** surface the DO export.
+
+**Next: slice 2 — codebase context v1** (tree + curated files via the installation token; SHA-keyed cache in `this.sql`; fed into the prompts).
 
 ## Approach
 
