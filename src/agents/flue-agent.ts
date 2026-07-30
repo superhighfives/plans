@@ -48,8 +48,6 @@ interface DraftState {
  * `commitBacklogItem` need no changes.
  */
 export class FlueAgent extends Agent {
-  private drafts = new Map<string, DraftState>()
-
   async onMessage(connection: Connection, message: WSMessage) {
     let parsed: { type?: string; idea?: string; answer?: string } = {}
     try {
@@ -81,7 +79,7 @@ export class FlueAgent extends Agent {
 
   /** Drop any in-flight draft for a connection that's gone — nothing else references it. */
   onClose(connection: Connection) {
-    this.drafts.delete(connection.id)
+    this.deleteDraft(connection.id)
   }
 
   /** Load (cache-first) this repo's codebase context and send back the manifest. */
@@ -144,7 +142,7 @@ export class FlueAgent extends Agent {
         tools: DRAFT_TOOLS,
       })
 
-      this.drafts.set(connection.id, {
+      this.writeDraft(connection.id, {
         system,
         repo: ctx.repo,
         token,
@@ -159,7 +157,7 @@ export class FlueAgent extends Agent {
 
   /** Resume a paused draft with the author's answer to the pending `ask_user` question. */
   private async continueDraft(connection: Connection, answer: string) {
-    const state = this.drafts.get(connection.id)
+    const state = this.readDraft(connection.id)
     if (!state) return this.fail(connection, 'no-active-draft')
 
     const pending = lastToolUse(state.messages)
@@ -183,7 +181,7 @@ export class FlueAgent extends Agent {
         tools: DRAFT_TOOLS,
       })
 
-      this.drafts.set(connection.id, {
+      this.writeDraft(connection.id, {
         ...state,
         messages: [...messages, { role: 'assistant', content: result.content }],
       })
@@ -205,8 +203,8 @@ export class FlueAgent extends Agent {
       return
     }
 
-    const state = this.drafts.get(connection.id)
-    this.drafts.delete(connection.id)
+    const state = this.readDraft(connection.id)
+    this.deleteDraft(connection.id)
     if (!state) return this.fail(connection, 'no-active-draft')
 
     const draft = result.toolCall.input as { title: string; body: string }
@@ -239,6 +237,40 @@ export class FlueAgent extends Agent {
 
   private fail(connection: Connection, error: string) {
     connection.send(JSON.stringify({ type: 'error', error }))
+  }
+
+  /**
+   * Draft conversation state, keyed by connection id, persisted in the DO's
+   * SQLite storage rather than an instance field — this Durable Object
+   * hibernates by default (see `agents`' `AgentStaticOptions.hibernate`),
+   * which evicts plain in-memory fields between messages while the
+   * WebSocket itself stays open. `ask_user` pauses exactly across that gap
+   * waiting on the author to type an answer, so the state has to survive it.
+   */
+  private ensureDraftsTable() {
+    this.sql`CREATE TABLE IF NOT EXISTS drafts (
+      connection_id TEXT PRIMARY KEY,
+      state TEXT NOT NULL
+    )`
+  }
+
+  private readDraft(connectionId: string): DraftState | null {
+    this.ensureDraftsTable()
+    const rows = this.sql<{ state: string }>`
+      SELECT state FROM drafts WHERE connection_id = ${connectionId}`
+    return rows[0] ? (JSON.parse(rows[0].state) as DraftState) : null
+  }
+
+  private writeDraft(connectionId: string, state: DraftState) {
+    this.ensureDraftsTable()
+    this.sql`INSERT INTO drafts (connection_id, state)
+      VALUES (${connectionId}, ${JSON.stringify(state)})
+      ON CONFLICT (connection_id) DO UPDATE SET state = excluded.state`
+  }
+
+  private deleteDraft(connectionId: string) {
+    this.ensureDraftsTable()
+    this.sql`DELETE FROM drafts WHERE connection_id = ${connectionId}`
   }
 
   private ensureCacheTable() {
