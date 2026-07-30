@@ -33,7 +33,16 @@ This is also the CMS's first **stateful/agentic** feature. It reuses two things 
 
 **Deviation from the spec's integration note:** exporting a DO requires the Worker's `main` to *be* our file, so `main` is now `./src/server.ts` (it calls `createStartHandler(defaultStreamHandler)` itself). `tanstackStart({ server: { entry } })` only swaps Start's *internal* handler — confirmed (by grepping the bundle) it does **not** surface the DO export.
 
-**Next: slice 2 — codebase context v1** (tree + curated files via the installation token; SHA-keyed cache in `this.sql`; fed into the prompts).
+**Slice 2 — codebase context v1: DONE (server side).**
+- `src/lib/github/tree.ts` — `fetchRepoTree` (full recursive blob tree at a ref).
+- `src/lib/plans/codebase.ts` — pure, tested `selectContextPaths` (curates stack/config/docs files; drops source + vendored/generated dirs).
+- `src/server/codebase.server.ts` — `fetchContextFiles` reads the curated blobs under a size budget (50 KB/file, 200 KB total).
+- `src/server/plans.server.ts` — `findRepoContext` (user-less repo+installation lookup; safe because the socket gate already authorized the user).
+- `FlueAgent` now answers a `{type:'context'}` message: resolve repo → installation token → `fetchRepoTree` → **cache-first** (its SQLite `codebase_cache` keyed by tree sha; unchanged tree skips the blob fetches) → replies with the file manifest + `cached` flag. `src/agents/instance.ts` gained a pure `parseInstanceName` (+ tests) so the DO can parse its own `owner~repo` name.
+- Client `FluePing` now requests context on connect and shows "read N context files (cached)".
+- Verified: typecheck + biome clean, 98 tests (5 new `parseInstanceName` cases), build exports `FlueAgent`. Live end-to-end (real installation token + WebSocket) verifies on the preview env once the OAuth callback is registered.
+
+**Next: slice 3 — conversational new-backlog** (feed this context into the authoring prompt; `ask_user` Q&A loop → existing preview/commit).
 
 ## Approach
 

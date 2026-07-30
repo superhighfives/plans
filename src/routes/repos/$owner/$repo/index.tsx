@@ -202,18 +202,31 @@ function RepoPage() {
 }
 
 /**
- * Slice-1 connectivity check for the Flue agent: open a WebSocket to this repo's
- * agent instance, send a ping once connected, and show the echo. Proves the
- * transport + auth gate end to end. Replaced by the real conversation UI in a
- * later slice.
+ * Flue status line: open a WebSocket to this repo's agent, request its codebase
+ * context on connect, and show what came back. Proves the transport + auth gate
+ * (slice 1) and the codebase-context load + SHA-keyed cache (slice 2) end to
+ * end. Replaced by the real conversation UI in a later slice.
  */
 function FluePing({ owner, repo }: { owner: string; repo: string }) {
-  const [echo, setEcho] = useState<string | null>(null)
+  const [status, setStatus] = useState<string | null>(null)
   const [error, setError] = useState(false)
   const flue = useAgent({
     agent: 'flue-agent',
     name: `${owner}~${repo}`,
-    onMessage: (e) => setEcho(typeof e.data === 'string' ? e.data : ''),
+    onMessage: (e) => {
+      try {
+        const msg = JSON.parse(typeof e.data === 'string' ? e.data : '{}')
+        if (msg.type === 'context') {
+          setStatus(
+            `read ${msg.files.length} context files${msg.cached ? ' (cached)' : ''}${msg.truncated ? ' · repo tree truncated' : ''}`,
+          )
+        } else if (msg.type === 'error') {
+          setStatus(`error: ${msg.error}`)
+        }
+      } catch {
+        setError(true)
+      }
+    },
     onError: () => setError(true),
   })
 
@@ -221,7 +234,7 @@ function FluePing({ owner, repo }: { owner: string; repo: string }) {
     let cancelled = false
     flue.ready
       .then(() => {
-        if (!cancelled) flue.send(JSON.stringify({ type: 'ping' }))
+        if (!cancelled) flue.send(JSON.stringify({ type: 'context' }))
       })
       .catch(() => setError(true))
     return () => {
@@ -231,7 +244,7 @@ function FluePing({ owner, repo }: { owner: string; repo: string }) {
 
   return (
     <p className="muted" style={{ fontSize: 13 }}>
-      Flue: {error ? 'offline' : echo ? `online · echo ${echo}` : 'connecting…'}
+      Flue: {error ? 'offline' : (status ?? 'connecting…')}
     </p>
   )
 }
