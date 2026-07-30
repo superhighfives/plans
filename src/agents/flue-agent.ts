@@ -1,6 +1,6 @@
 import { Agent, type Connection, type WSMessage } from 'agents'
 import { getDb } from '~/db'
-import type { Repo } from '~/db/schema'
+import type { Installation, Repo } from '~/db/schema'
 import { getEnv } from '~/env'
 import {
   type AiMessage,
@@ -29,7 +29,7 @@ const DRAFT_TOOLS = [ASK_USER_TOOL, NEW_BACKLOG_TOOL]
 interface DraftState {
   system: string
   repo: Repo
-  token: string
+  installation: Installation
   messages: AiMessage[]
 }
 
@@ -145,7 +145,7 @@ export class FlueAgent extends Agent {
       this.writeDraft(connection.id, {
         system,
         repo: ctx.repo,
-        token,
+        installation: ctx.installation,
         messages: [...messages, { role: 'assistant', content: result.content }],
       })
       await this.handleDraftTurn(connection, result)
@@ -207,8 +207,11 @@ export class FlueAgent extends Agent {
     this.deleteDraft(connection.id)
     if (!state) return this.fail(connection, 'no-active-draft')
 
+    const env = getEnv()
+    const db = getDb()
+    const token = await getInstallationToken(db, env, state.installation)
     const draft = result.toolCall.input as { title: string; body: string }
-    const preview = await buildBacklogPreview(state.token, state.repo, draft)
+    const preview = await buildBacklogPreview(token, state.repo, draft)
     connection.send(JSON.stringify({ type: 'preview', ...preview }))
   }
 
