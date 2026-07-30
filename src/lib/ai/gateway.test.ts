@@ -4,6 +4,7 @@ import {
   AIConfigError,
   completeStructured,
   completeText,
+  completeToolTurn,
   PLAN_MODEL,
 } from './gateway'
 
@@ -92,5 +93,59 @@ describe('completeStructured', () => {
     await expect(
       completeStructured(env, { system: 's', prompt: 'p', tool }),
     ).rejects.toThrow(/structured output/)
+  })
+})
+
+const askTool = {
+  name: 'ask_user',
+  description: 'ask',
+  input_schema: { type: 'object' as const, properties: {} },
+}
+
+describe('completeToolTurn', () => {
+  it('forces one of several tools (tool_choice: any) and returns the call + raw content', async () => {
+    const content = [
+      {
+        type: 'tool_use',
+        id: 'call_1',
+        name: 'ask_user',
+        input: { question: 'Which datastore?' },
+      },
+    ]
+    run.mockResolvedValue({ content })
+
+    const messages = [{ role: 'user' as const, content: 'go' }]
+    const out = await completeToolTurn(env, {
+      system: 'sys',
+      messages,
+      tools: [askTool, tool],
+    })
+
+    expect(out.toolCall).toEqual({
+      id: 'call_1',
+      name: 'ask_user',
+      input: { question: 'Which datastore?' },
+    })
+    expect(out.content).toBe(content)
+    expect(run).toHaveBeenCalledWith(
+      PLAN_MODEL,
+      expect.objectContaining({
+        tools: [askTool, tool],
+        tool_choice: { type: 'any' },
+        messages,
+      }),
+      { gateway: { id: 'gw' } },
+    )
+  })
+
+  it('throws when the model returns no tool_use block', async () => {
+    run.mockResolvedValue({ content: [{ type: 'text', text: 'nope' }] })
+    await expect(
+      completeToolTurn(env, {
+        system: 's',
+        messages: [{ role: 'user', content: 'p' }],
+        tools: [tool],
+      }),
+    ).rejects.toThrow(/tool call/)
   })
 })

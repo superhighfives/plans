@@ -33,14 +33,31 @@ interface TextBlock {
   type: 'text'
   text: string
 }
-interface ToolUseBlock {
+export interface ToolUseBlock {
   type: 'tool_use'
+  id: string
   name: string
   input: unknown
 }
-type ContentBlock = TextBlock | ToolUseBlock | { type: string }
+/** A tool's result, sent back to the model as part of the next user turn. */
+export interface ToolResultBlock {
+  type: 'tool_result'
+  tool_use_id: string
+  content: string
+}
+export type ContentBlock =
+  | TextBlock
+  | ToolUseBlock
+  | ToolResultBlock
+  | { type: string }
 interface MessageResponse {
   content?: ContentBlock[]
+}
+
+/** One turn in an ongoing tool-calling conversation (Anthropic-native shape). */
+export interface AiMessage {
+  role: 'user' | 'assistant'
+  content: string | ContentBlock[]
 }
 
 /**
@@ -128,4 +145,49 @@ export async function completeStructured<T>(
   if (!block)
     throw new Error('Model did not return the expected structured output')
   return block.input as T
+}
+
+/** One turn's result from {@link completeToolTurn}. */
+export interface ToolTurnResult {
+  /** The raw content blocks the model returned — echo these back verbatim as
+   * the next `assistant` message so the transcript stays faithful. */
+  content: ContentBlock[]
+  /** The tool the model chose. `tool_choice: "any"` guarantees exactly one. */
+  toolCall: { id: string; name: string; input: unknown }
+}
+
+/**
+ * Run one turn of a multi-tool conversation, forcing the model to answer via
+ * one of `tools` every turn (never plain prose) — a Q&A agent loop without
+ * parsing free text. The caller owns the transcript: pass the full message
+ * history, appending the previous turn's `assistant` content (from
+ * {@link ToolTurnResult.content}) and a `tool_result` user message with the
+ * tool's answer before calling again.
+ */
+export async function completeToolTurn(
+  env: AppEnv,
+  params: {
+    system: string
+    messages: AiMessage[]
+    tools: AiTool[]
+    maxTokens?: number
+  },
+): Promise<ToolTurnResult> {
+  assertConfigured(env)
+  const res = await runMessages(env, {
+    max_tokens: params.maxTokens ?? 4000,
+    system: params.system,
+    tools: params.tools,
+    tool_choice: { type: 'any' },
+    messages: params.messages,
+  })
+  const content = res.content ?? []
+  const block = content.find((b) => b.type === 'tool_use') as
+    | ToolUseBlock
+    | undefined
+  if (!block) throw new Error('Model did not return the expected tool call')
+  return {
+    content,
+    toolCall: { id: block.id, name: block.name, input: block.input },
+  }
 }
