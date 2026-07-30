@@ -136,6 +136,67 @@ export function buildNewBacklogPrompt(opts: { idea: string }): {
 }
 
 /**
+ * Tool Flue uses to pause a draft and ask the author one clarifying question.
+ * Paired with {@link NEW_BACKLOG_TOOL} under `tool_choice: "any"` so every
+ * turn is one or the other — never free text.
+ */
+export const ASK_USER_TOOL: AiTool = {
+  name: 'ask_user',
+  description:
+    'Ask the author ONE clarifying question before drafting further. Use only when a genuinely ambiguous decision would change the plan — prefer drafting with an "Open questions" entry over asking anything you could reasonably infer or leave open.',
+  input_schema: {
+    type: 'object',
+    properties: {
+      question: {
+        type: 'string',
+        description: 'A single, specific question for the author.',
+      },
+    },
+    required: ['question'],
+  },
+}
+
+/**
+ * Build the system + first user prompt for Flue's conversational new-backlog
+ * flow: the same backlog-stage framing as {@link buildNewBacklogPrompt}, plus
+ * the repo's curated codebase context (so the draft is grounded in what's
+ * actually there) and the option to ask a clarifying question via
+ * {@link ASK_USER_TOOL} before committing to a draft.
+ */
+export function buildConversationalBacklogPrompt(opts: {
+  idea: string
+  context: { path: string; text: string }[]
+}): { system: string; prompt: string } {
+  const system = `${NEW_BACKLOG_SYSTEM}
+
+You have two tools: \`ask_user\` to get a clarifying answer before drafting, and \`emit_backlog_item\` to submit the finished draft. Every turn, call exactly one of them — never reply in plain text. Ask at most a couple of questions total; once you have enough to write an honest, rough backlog entry (open questions in the body are fine for the rest), emit the draft.`
+
+  const contextBlock =
+    opts.context.length > 0
+      ? [
+          "The repo's codebase context — ground the idea in what's actually here (stack, structure, conventions):",
+          ...opts.context.map(
+            (f) => `### ${f.path}\n\`\`\`\n${f.text}\n\`\`\``,
+          ),
+        ].join('\n\n')
+      : null
+
+  const prompt = [
+    contextBlock,
+    'Rough idea from the author:',
+    '"""',
+    opts.idea.trim(),
+    '"""',
+    '',
+    'Call ask_user if something essential is ambiguous, otherwise call emit_backlog_item now.',
+  ]
+    .filter((line) => line !== null)
+    .join('\n\n')
+
+  return { system, prompt }
+}
+
+/**
  * Heuristic scan for unresolved questions — used to warn (not block) before a
  * plan is promoted to `ready`. Matches the conventions the skill's prose uses.
  */

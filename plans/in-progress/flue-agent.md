@@ -42,7 +42,15 @@ This is also the CMS's first **stateful/agentic** feature. It reuses two things 
 - Client `FluePing` now requests context on connect and shows "read N context files (cached)".
 - Verified: typecheck + biome clean, 98 tests (5 new `parseInstanceName` cases), build exports `FlueAgent`. Live end-to-end (real installation token + WebSocket) verifies on the preview env once the OAuth callback is registered.
 
-**Next: slice 3 — conversational new-backlog** (feed this context into the authoring prompt; `ask_user` Q&A loop → existing preview/commit).
+**Slice 3 — conversational new-backlog: DONE (server side).**
+- `src/lib/ai/gateway.ts` — `completeToolTurn`: one turn of a multi-tool conversation, `tool_choice: "any"` so the model must answer via one of the given tools (never prose). Returns the raw content blocks (to echo back next turn) plus the chosen `{id, name, input}`.
+- `src/lib/ai/plan-prompts.ts` — `ASK_USER_TOOL` (a single clarifying question) and `buildConversationalBacklogPrompt` (the backlog-stage framing plus the repo's curated codebase context folded into the prompt).
+- `src/server/plans.server.ts` — extracted `buildBacklogPreview` (slug/path derivation + frontmatter) out of `proposeNewBacklog` so the one-shot and conversational paths share it; nothing about committing changed.
+- `FlueAgent` now handles `{type:'draft_backlog', idea}`: loads the cache-first codebase context (same path as `context`), then loops the model between `ask_user` (pauses, sends `{type:'question'}`, resumed by `{type:'answer'}`) and `emit_backlog_item` (packages the draft via `buildBacklogPreview`, sends `{type:'preview', ...}`). Conversation state lives in-memory per connection id; `onClose` drops it.
+- Client: `NewBacklogItem` now drives the whole flow over the Flue socket (replacing the old one-shot `proposeBacklogItem` call and the separate `FluePing` status line) — a question step renders inline when Flue asks one, then lands on the same preview → `commitBacklogItem` approval UI as before.
+- Verified: typecheck + biome clean, 103 tests (7 new — `completeToolTurn`, `ASK_USER_TOOL`, `buildConversationalBacklogPrompt`), build exports `FlueAgent`. Live end-to-end (real conversation over the preview env) not yet run.
+
+**Next: slice 4 — conversational move** (same `ask_user` pattern → existing diff preview → `commitPlanMove`).
 
 ## Approach
 

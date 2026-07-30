@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import {
+  ASK_USER_TOOL,
+  buildConversationalBacklogPrompt,
   buildMovePrompt,
   buildNewBacklogPrompt,
   findOpenQuestions,
@@ -80,5 +82,37 @@ describe('buildNewBacklogPrompt', () => {
   it('exposes a tool schema requiring title and body', () => {
     expect(NEW_BACKLOG_TOOL.name).toBe('emit_backlog_item')
     expect(NEW_BACKLOG_TOOL.input_schema.required).toEqual(['title', 'body'])
+  })
+})
+
+describe('ASK_USER_TOOL', () => {
+  it('exposes a tool schema requiring a question', () => {
+    expect(ASK_USER_TOOL.name).toBe('ask_user')
+    expect(ASK_USER_TOOL.input_schema.required).toEqual(['question'])
+  })
+})
+
+describe('buildConversationalBacklogPrompt', () => {
+  it('embeds the idea, both tool names, and instructs one-tool-per-turn', () => {
+    const { system, prompt } = buildConversationalBacklogPrompt({
+      idea: 'A way to bulk-archive old plans.',
+      context: [],
+    })
+    expect(system).toContain('BACKLOG-stage')
+    expect(system).toContain('ask_user')
+    expect(system).toContain('emit_backlog_item')
+    expect(system).toContain('never reply in plain text')
+    expect(prompt).toContain('A way to bulk-archive old plans.')
+    expect(prompt).not.toContain('codebase context')
+  })
+
+  it('folds curated codebase files into the prompt when given', () => {
+    const { prompt } = buildConversationalBacklogPrompt({
+      idea: 'Add a test framework.',
+      context: [{ path: 'package.json', text: '{"name":"demo"}' }],
+    })
+    expect(prompt).toContain('codebase context')
+    expect(prompt).toContain('### package.json')
+    expect(prompt).toContain('{"name":"demo"}')
   })
 })

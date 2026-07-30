@@ -767,6 +767,21 @@ export async function proposeNewBacklog(
     prompt,
     tool: NEW_BACKLOG_TOOL,
   })
+  return buildBacklogPreview(token, repo, draft)
+}
+
+/**
+ * Derive a collision-free filename and serialized frontmatter for a drafted
+ * {title, body} and package it as a preview — the part of backlog-drafting
+ * that isn't the AI call itself. Shared by the one-shot draft above and
+ * Flue's conversational draft (`FlueAgent`, slice 3), so path/slug rules and
+ * the deterministic lifecycle fields live in exactly one place.
+ */
+export async function buildBacklogPreview(
+  token: string,
+  repo: Repo,
+  draft: { title: string; body: string },
+): Promise<NewBacklogPreview> {
   const title = draft.title.trim() || 'Untitled plan'
   const body = draft.body.trim()
 

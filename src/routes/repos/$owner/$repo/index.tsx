@@ -19,7 +19,6 @@ import type {
 import {
   commitBacklogItem,
   getRepoPlans,
-  proposeBacklogItem,
   refreshRepoPlans,
 } from '~/server/repo.functions'
 
@@ -201,58 +200,29 @@ function RepoPage() {
   )
 }
 
-/**
- * Flue status line: open a WebSocket to this repo's agent, request its codebase
- * context on connect, and show what came back. Proves the transport + auth gate
- * (slice 1) and the codebase-context load + SHA-keyed cache (slice 2) end to
- * end. Replaced by the real conversation UI in a later slice.
- */
-function FluePing({ owner, repo }: { owner: string; repo: string }) {
-  const [status, setStatus] = useState<string | null>(null)
-  const [error, setError] = useState(false)
-  const flue = useAgent({
-    agent: 'flue-agent',
-    name: `${owner}~${repo}`,
-    onMessage: (e) => {
-      try {
-        const msg = JSON.parse(typeof e.data === 'string' ? e.data : '{}')
-        if (msg.type === 'context') {
-          setStatus(
-            `read ${msg.files.length} context files${msg.cached ? ' (cached)' : ''}${msg.truncated ? ' · repo tree truncated' : ''}`,
-          )
-        } else if (msg.type === 'error') {
-          setStatus(`error: ${msg.error}`)
-        }
-      } catch {
-        setError(true)
-      }
-    },
-    onError: () => setError(true),
-  })
-
-  useEffect(() => {
-    let cancelled = false
-    flue.ready
-      .then(() => {
-        if (!cancelled) flue.send(JSON.stringify({ type: 'context' }))
-      })
-      .catch(() => setError(true))
-    return () => {
-      cancelled = true
-    }
-  }, [flue])
-
-  return (
-    <p className="muted" style={{ fontSize: 13 }}>
-      Flue: {error ? 'offline' : (status ?? 'connecting…')}
-    </p>
-  )
+/** A message Flue can send back over the draft conversation's WebSocket. */
+interface FlueMessage {
+  type?: string
+  files?: string[]
+  cached?: boolean
+  truncated?: boolean
+  question?: string
+  error?: string
+  title?: string
+  slug?: string
+  path?: string
+  newContent?: string
+  body?: string
 }
 
 /**
- * Draft a new backlog item with AI. The user types a rough idea, Claude proposes
- * a title + body, and the rendered plan is shown for approval before anything is
- * committed into plans/backlog/ (mirrors the Phase 3 move preview path).
+ * Draft a new backlog item conversationally with Flue. The user types a rough
+ * idea; Flue (grounded in the repo's cached codebase context) either asks a
+ * clarifying question — answered inline, looping until it has enough — or
+ * proposes a title + body straight away. The rendered plan is then shown for
+ * approval before anything is committed into plans/backlog/ (mirrors the
+ * Phase 3 move preview path; committing still goes through the existing
+ * `commitBacklogItem` path, unchanged).
  */
 function NewBacklogItem({
   owner,
@@ -265,25 +235,92 @@ function NewBacklogItem({
 }) {
   const router = useRouter()
   const [idea, setIdea] = useState('')
+  const [flueStatus, setFlueStatus] = useState<string | null>(null)
   const [drafting, setDrafting] = useState(false)
+  const [question, setQuestion] = useState<string | null>(null)
+  const [answer, setAnswer] = useState('')
   const [preview, setPreview] = useState<NewBacklogPreview | null>(null)
   const [committing, setCommitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
+
+  const flue = useAgent({
+    agent: 'flue-agent',
+    name: `${owner}~${repo}`,
+    onMessage: (e) => {
+      let msg: FlueMessage
+      try {
+        msg = JSON.parse(typeof e.data === 'string' ? e.data : '{}')
+      } catch {
+        setDrafting(false)
+        setError('Flue sent something unreadable — try again.')
+        return
+      }
+      if (msg.type === 'context') {
+        setFlueStatus(
+          `read ${msg.files?.length ?? 0} context files${msg.cached ? ' (cached)' : ''}`,
+        )
+      } else if (msg.type === 'question' && msg.question) {
+        setDrafting(false)
+        setQuestion(msg.question)
+      } else if (msg.type === 'preview') {
+        setDrafting(false)
+        setQuestion(null)
+        setPreview({
+          title: msg.title ?? '',
+          slug: msg.slug ?? '',
+          path: msg.path ?? '',
+          newContent: msg.newContent ?? '',
+          body: msg.body ?? '',
+        })
+      } else if (msg.type === 'error') {
+        setDrafting(false)
+        setError("Flue couldn't draft the item — try again.")
+      }
+    },
+    onError: () => {
+      setDrafting(false)
+      setError('Lost connection to Flue — try again.')
+    },
+  })
+
+  useEffect(() => {
+    let cancelled = false
+    flue.ready
+      .then(() => {
+        if (!cancelled) flue.send(JSON.stringify({ type: 'context' }))
+      })
+      .catch(() => {})
+    return () => {
+      cancelled = true
+    }
+  }, [flue])
 
   async function draft() {
     if (idea.trim().length === 0) return
     setDrafting(true)
     setError(null)
     setPreview(null)
+    setQuestion(null)
     try {
-      const result = await proposeBacklogItem({ data: { owner, repo, idea } })
-      setPreview(result)
+      await flue.ready
+      flue.send(JSON.stringify({ type: 'draft_backlog', idea }))
     } catch {
-      setError(
-        "Couldn't draft the item. The AI Gateway may not be configured, or the request failed — try again.",
-      )
-    } finally {
       setDrafting(false)
+      setError("Couldn't reach Flue — try again.")
+    }
+  }
+
+  async function sendAnswer() {
+    if (answer.trim().length === 0) return
+    setDrafting(true)
+    setError(null)
+    try {
+      await flue.ready
+      flue.send(JSON.stringify({ type: 'answer', answer }))
+      setAnswer('')
+    } catch {
+      setDrafting(false)
+      setError("Couldn't reach Flue — try again.")
     }
   }
 
@@ -362,13 +399,51 @@ function NewBacklogItem({
     )
   }
 
+  if (question) {
+    return (
+      <div className="move">
+        <h2 className="move__title">New backlog item</h2>
+        <p className="move__hint">Flue has a question before drafting:</p>
+        <p>{question}</p>
+        <textarea
+          className="move__context"
+          placeholder="Your answer…"
+          value={answer}
+          onChange={(e) => setAnswer(e.target.value)}
+        />
+        {error ? <p className="plan-editor__error">{error}</p> : null}
+        <div className="plan-editor__bar">
+          <button
+            type="button"
+            className="btn"
+            onClick={sendAnswer}
+            disabled={drafting || answer.trim().length === 0}
+          >
+            {drafting ? 'Thinking…' : 'Answer'}
+          </button>
+          <button
+            type="button"
+            className="btn btn--ghost"
+            onClick={onClose}
+            disabled={drafting}
+          >
+            Cancel
+          </button>
+        </div>
+      </div>
+    )
+  }
+
   return (
     <div className="move">
       <h2 className="move__title">New backlog item</h2>
-      <FluePing owner={owner} repo={repo} />
+      <p className="muted" style={{ fontSize: 13 }}>
+        Flue: {flueStatus ?? 'connecting…'}
+      </p>
       <p className="move__hint">
-        Describe a rough idea. Claude drafts a backlog entry — with a title and
-        a sketch — then shows it to you before anything is committed.
+        Describe a rough idea. Flue (grounded in this repo's codebase) drafts a
+        backlog entry — asking a clarifying question first if it needs one —
+        then shows it to you before anything is committed.
       </p>
       <textarea
         className="move__context"
