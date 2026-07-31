@@ -51,11 +51,12 @@ This is also the CMS's first **stateful/agentic** feature. It reuses two things 
 - Verified: typecheck + biome clean, 103 tests (7 new — `completeToolTurn`, `ASK_USER_TOOL`, `buildConversationalBacklogPrompt`), build exports `FlueAgent`. Live end-to-end (real conversation over the preview env) not yet run.
 
 **Slice 4 — conversational move: DONE (server side).**
-- `src/lib/ai/plan-prompts.ts` — exported `MOVE_SYSTEM`/`transitionGuidance` (previously module-private) for reuse; added `PROPOSE_MOVE_TOOL` (submits the rewritten body) and `buildConversationalMovePrompt` (same transition framing as `buildMovePrompt`, plus codebase context and the `ask_user` option).
-- `src/server/plans.server.ts` — extracted `buildMovePreview` (frontmatter re-attach, destination path, diff, destination-exists check) out of `proposePlanMove` so the one-shot and conversational paths share it; nothing about committing changed.
+- `src/lib/ai/plan-prompts.ts` — exported `MOVE_SYSTEM`/`transitionGuidance` (previously module-private) for reuse; added `PROPOSE_MOVE_TOOL` (submits the rewritten body) and `buildConversationalMovePrompt` (same transition framing, plus codebase context and the `ask_user` option).
+- `src/server/plans.server.ts` — extracted `buildMovePreview` (frontmatter re-attach, destination path, diff, destination-exists check) out of `proposePlanMove` so the one-shot and conversational paths shared it at first; nothing about committing changed.
 - `FlueAgent`'s draft state is now a `{kind: 'backlog'} | {kind: 'move'}` union in the same SQLite-backed `drafts` table. `{type:'draft_move', path, toState, context}` loads the plan source + cached codebase context, then loops `ask_user` / `propose_move` the same way the backlog draft loops `ask_user` / `emit_backlog_item`; the finished body is packaged via `buildMovePreview` and sent as `{type:'move_preview', ...}`.
 - Client: `PlanMoveControl` now drives the move over the Flue socket instead of the one-shot `proposeMove` call — a question step renders inline (labeled with the target state) when Flue asks one, then lands on the same diff/edit preview → `commitMove` approval UI as before.
-- Verified: typecheck + biome clean, 106 tests (3 new — `PROPOSE_MOVE_TOOL`, `buildConversationalMovePrompt`), build exports `FlueAgent`. Live end-to-end (real conversation over the preview env) not yet run.
+- **Follow-up (same PR, post-review):** Claude Code Review flagged `proposeMove`/`proposeBacklogItem` as dead once both flows moved onto the Flue socket. Removed them and cascaded to everything only they called — `proposePlanMove`/`proposeNewBacklog`, `buildMovePrompt`/`buildNewBacklogPrompt`, `completeText`/`completeStructured` — plus orphaned tests. `buildMovePreview`/`buildBacklogPreview` are now solely the conversational paths' helpers.
+- Verified: typecheck + biome clean, 100 tests (net of the dead-code removal), build exports `FlueAgent`. Live end-to-end (real conversation over the preview env) not yet run. Merged as #16.
 
 **Next: slice 5 — container escalation** (Workflow + Sandbox clone for run-code tasks, only when needed).
 
@@ -108,16 +109,16 @@ Each slice ships value on its own:
 
 ## Tasks
 
-- [ ] `FlueAgent` Durable Object (Agents SDK) + wrangler binding/migration; exported from the Worker.
-- [ ] `routeAgentRequest` wiring + auth (session + user→installation repo-access check) on socket connect.
-- [ ] `useAgent` client surface embedded in the create-backlog and move panels.
-- [ ] Codebase-context tools (`list_repo_tree`, `read_file`) over the installation token; SHA-keyed cache in `this.sql`, busted on `push`.
-- [ ] `ask_user` clarifying-question loop rendered inline in the panel.
-- [ ] Conversational **new backlog item**: Q&A → `propose_new_backlog` → existing rendered preview → `commitNewBacklog`.
-- [ ] Conversational **move**: Q&A → `propose_move` → existing diff preview (editable) → `commitPlanMove`.
-- [ ] `waitForApproval()` gate wired to the preview UI.
+- [x] `FlueAgent` Durable Object (Agents SDK) + wrangler binding/migration; exported from the Worker.
+- [x] `routeAgentRequest` wiring + auth (session + user→installation repo-access check) on socket connect.
+- [x] `useAgent` client surface embedded in the create-backlog and move panels.
+- [ ] Codebase-context tools (`list_repo_tree`, `read_file`) over the installation token; SHA-keyed cache in `this.sql`, busted on `push`. **Deviation:** shipped as preloaded context instead — the curated tree + files are fetched and folded into the prompt up front (SHA-keyed cache, but not push-busted; it just re-checks the tree sha per request), rather than exposed as agent-callable tools. Revisit if a repo's curated set stops being enough context.
+- [x] `ask_user` clarifying-question loop rendered inline in the panel.
+- [x] Conversational **new backlog item**: Q&A → `emit_backlog_item` → existing rendered preview → `commitBacklogItem`.
+- [x] Conversational **move**: Q&A → `propose_move` → existing diff preview (editable) → `commitPlanMove`.
+- [ ] `waitForApproval()` gate wired to the preview UI. **Deviation:** built a bespoke `ask_user`/`answer` WebSocket protocol instead of the Agents SDK's `waitForApproval()` primitive — same effect (pause for human input mid-conversation), simpler to reason about given the DO already had a raw-message protocol from slice 1.
 - [ ] Container / Sandbox escalation behind a Workflow for run-code tasks.
-- [ ] Tests: agent tool handlers, context cache + invalidation, and the Q&A → preview → commit path.
+- [ ] Tests: agent tool handlers, context cache + invalidation, and the Q&A → preview → commit path. Unit tests exist for the pure pieces (`parseInstanceName`, prompt builders, `completeToolTurn`); `FlueAgent` itself (a Durable Object) has no direct unit tests yet — only live/manual verification.
 
 ## Open questions
 
