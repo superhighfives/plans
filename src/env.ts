@@ -1,9 +1,12 @@
 import { env as cfEnv } from 'cloudflare:workers'
+import type { Sandbox } from '@cloudflare/sandbox'
 import type {
   Ai,
   D1Database,
   DurableObjectNamespace,
+  Workflow,
 } from '@cloudflare/workers-types'
+import type { VerifyPlanMovePayload } from '~/workflows/verify-plan-move'
 
 /**
  * Typed view of the Worker's bindings + secrets.
@@ -22,6 +25,13 @@ export interface AppEnv {
 
   /** Flue conversational agent — one Durable Object instance per repo. */
   FlueAgent: DurableObjectNamespace
+
+  /** One ephemeral container per verify-plan-move run (slice 5). */
+  Sandbox: DurableObjectNamespace<Sandbox>
+
+  /** Clones a repo, installs deps, and runs its test/build scripts before a
+   * "move to done" commits — see `~/workflows/verify-plan-move`. */
+  VERIFY_PLAN_MOVE_WORKFLOW: Workflow<VerifyPlanMovePayload>
 
   /** GitHub App numeric id. */
   GITHUB_APP_ID: string

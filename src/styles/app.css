@@ -658,6 +658,57 @@ form {
   border-color: #e5484d;
   background: color-mix(in srgb, #e5484d 8%, transparent);
 }
+.move__verify {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px 14px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--panel-2);
+}
+.move__verify-bar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+.move__verify-steps {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.move__verify-step {
+  font-size: 13px;
+  font-family: var(--font-mono, monospace);
+}
+.move__verify-step--ok {
+  color: var(--state-done);
+}
+.move__verify-step--fail {
+  color: #e5484d;
+}
+.move__verify-log {
+  margin: 4px 0 0;
+  padding: 8px 10px;
+  border-radius: var(--radius-sm);
+  background: var(--panel);
+  color: var(--muted);
+  font-size: 12px;
+  white-space: pre-wrap;
+  max-height: 200px;
+  overflow-y: auto;
+}
+.move__verify-override {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  color: var(--muted);
+}
 .plan-editor__bar {
   display: flex;
   gap: 8px;

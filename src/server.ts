@@ -11,10 +11,12 @@ import { readSession } from '~/server/session'
 import { getUserById } from '~/server/users.server'
 import { parseAgentInstance } from './agents/instance'
 
-// The Durable Object class must be a named export of the Worker entry so the
-// runtime can bind it. Re-exported here (this file is the Worker `main`) rather
-// than from a route module.
+// The Durable Object / Workflow classes must be named exports of the Worker
+// entry so the runtime can bind them. Re-exported here (this file is the
+// Worker `main`) rather than from a route module.
+export { Sandbox } from '@cloudflare/sandbox'
 export { FlueAgent } from './agents/flue-agent'
+export { VerifyPlanMoveWorkflow } from './workflows/verify-plan-move'
 
 const handleStart = createStartHandler(defaultStreamHandler)
 

@@ -21,6 +21,7 @@
     "cf-typegen": "wrangler types"
   },
   "dependencies": {
+    "@cloudflare/sandbox": "^0.12.4",
     "@tanstack/react-query": "^5.101.2",
     "@tanstack/react-router": "^1.170.18",
     "@tanstack/react-start": "^1.168.32",
@@ -44,5 +45,8 @@
     "vite": "^8.1.5",
     "vitest": "^4.1.10",
     "wrangler": "^4.112.0"
+  },
+  "overrides": {
+    "@cloudflare/workers-types": "$@cloudflare/workers-types"
   }
 }

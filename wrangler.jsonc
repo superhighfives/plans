@@ -26,10 +26,39 @@
   "ai": { "binding": "AI", "remote": true },
   // Flue conversational agent — one Durable Object instance per repo. Agents
   // SDK requires SQLite-backed DOs (new_sqlite_classes).
+  //
+  // Sandbox — one ephemeral container per verify run (slice 5: "move to done"
+  // runs the repo's own test/build scripts before committing). See Dockerfile.
   "durable_objects": {
-    "bindings": [{ "name": "FlueAgent", "class_name": "FlueAgent" }]
+    "bindings": [
+      { "name": "FlueAgent", "class_name": "FlueAgent" },
+      { "name": "Sandbox", "class_name": "Sandbox" }
+    ]
   },
-  "migrations": [{ "tag": "v1", "new_sqlite_classes": ["FlueAgent"] }],
+  "containers": [
+    {
+      "class_name": "Sandbox",
+      "image": "./Dockerfile",
+      "instance_type": "lite",
+      "max_instances": 1
+    }
+  ],
+  // Long-running verify step (git clone + install + test/build can take
+  // minutes) — Workflows checkpoint each step so it survives past a single
+  // request instead of racing a Worker's request timeout.
+  "workflows": [
+    {
+      "name": "verify-plan-move",
+      "binding": "VERIFY_PLAN_MOVE_WORKFLOW",
+      "class_name": "VerifyPlanMoveWorkflow"
+    }
+  ],
+  // Migrations are append-only — each new Durable Object class gets its own
+  // tag rather than editing an already-applied one.
+  "migrations": [
+    { "tag": "v1", "new_sqlite_classes": ["FlueAgent"] },
+    { "tag": "v2", "new_sqlite_classes": ["Sandbox"] }
+  ],
   // Secrets (set with `wrangler secret put <NAME>` for production, or in
   // `.dev.vars` for local dev — see .dev.vars.example):
   //   GITHUB_APP_ID, GITHUB_APP_CLIENT_ID, GITHUB_APP_CLIENT_SECRET,
@@ -59,9 +88,30 @@
       ],
       "ai": { "binding": "AI", "remote": true },
       "durable_objects": {
-        "bindings": [{ "name": "FlueAgent", "class_name": "FlueAgent" }]
+        "bindings": [
+          { "name": "FlueAgent", "class_name": "FlueAgent" },
+          { "name": "Sandbox", "class_name": "Sandbox" }
+        ]
       },
-      "migrations": [{ "tag": "v1", "new_sqlite_classes": ["FlueAgent"] }]
+      "containers": [
+        {
+          "class_name": "Sandbox",
+          "image": "./Dockerfile",
+          "instance_type": "lite",
+          "max_instances": 1
+        }
+      ],
+      "workflows": [
+        {
+          "name": "verify-plan-move-preview",
+          "binding": "VERIFY_PLAN_MOVE_WORKFLOW",
+          "class_name": "VerifyPlanMoveWorkflow"
+        }
+      ],
+      "migrations": [
+        { "tag": "v1", "new_sqlite_classes": ["FlueAgent"] },
+        { "tag": "v2", "new_sqlite_classes": ["Sandbox"] }
+      ]
     }
   }
 }

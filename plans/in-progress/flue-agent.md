@@ -58,7 +58,17 @@ This is also the CMS's first **stateful/agentic** feature. It reuses two things 
 - **Follow-up (same PR, post-review):** Claude Code Review flagged `proposeMove`/`proposeBacklogItem` as dead once both flows moved onto the Flue socket. Removed them and cascaded to everything only they called — `proposePlanMove`/`proposeNewBacklog`, `buildMovePrompt`/`buildNewBacklogPrompt`, `completeText`/`completeStructured` — plus orphaned tests. `buildMovePreview`/`buildBacklogPreview` are now solely the conversational paths' helpers.
 - Verified: typecheck + biome clean, 100 tests (net of the dead-code removal), build exports `FlueAgent`. Live end-to-end (real conversation over the preview env) not yet run. Merged as #16.
 
-**Next: slice 5 — container escalation** (Workflow + Sandbox clone for run-code tasks, only when needed).
+**Slice 5 — container escalation: DONE (server side).**
+- **Trigger resolved** (was an open question): a plan's move to `done` — the author gets to verify claims like "tests pass" / "build succeeds" by actually running the repo's own scripts, rather than trusting the AI-rewritten prose.
+- `Dockerfile` — `docker.io/cloudflare/sandbox:0.12.4` (pinned to the `@cloudflare/sandbox` package version; ships Node, npm, git).
+- `wrangler.jsonc` — `Sandbox` container/DO binding (`containers` + `durable_objects`, migration tag `v2`) and a `VERIFY_PLAN_MOVE_WORKFLOW` Workflow binding, both redeclared in `env.preview` (named environments don't inherit bindings).
+- `src/workflows/verify-plan-move.ts` — `VerifyPlanMoveWorkflow`: `gitCheckout`s the repo's default branch into a per-run Sandbox (an installation token embedded in the clone URL only, minted fresh inside the workflow from `installationId` — never passed as a Workflow param, which are checkpointed/persisted, the same "don't persist the raw token" discipline as `FlueAgent`'s draft state), `npm ci`/`install`, then runs whichever of `test`/`build` package.json actually defines, stopping at the first failure. Each step (clone/install/test/build/destroy) is a `step.do` checkpoint, so a platform hiccup resumes rather than restarting.
+- `src/server/repo.functions.ts` — `startVerifyMove` (creates the Workflow instance, returns its id) and `getVerifyMoveStatus` (polls `.status()`), both auth-gated the same way every other RPC is.
+- Client: `PlanMoveControl`'s preview, when `toState === 'done'`, gains a `VerifyMoveControl` panel — a "Run tests & build" button that polls to completion and shows pass/fail per step (with a truncated log on failure); "Approve & commit" is disabled until it passes, with an explicit "Commit anyway" override (flaky runs, or a repo with no test/build script — verification is a confidence aid, not a hard gate the author can't override).
+- **Type-system detour:** hit (and fixed) a real gap — this project's hand-rolled `cloudflare:workers` ambient stub (`src/types/worker.d.ts`, added early on to make typecheck/CI work without running `wrangler types`) only declared `env`, and fully shadowed `@cloudflare/workers-types`' richer declaration for that module (a plain named-export block can't merge with the package's `export =`-wrapped one). Extended the stub with `WorkflowEntrypoint`/`WorkflowEvent`/`WorkflowStep`/`DurableObject` (the last needed so `@cloudflare/sandbox`'s `Sandbox` class structurally satisfies `DurableObjectNamespace<T>`'s branded-type constraint). Also deduped a stray `@cloudflare/workers-types` v4 copy pulled in transitively via `agents` → `partyserver` (package.json `overrides`) — didn't fix this specific issue alone, but is a correctness fix in its own right.
+- Verified: typecheck + biome clean, 100 tests, build exports `FlueAgent` + `Sandbox` + `VerifyPlanMoveWorkflow` and the built `wrangler.json` carries the `containers`/`workflows`/migration-v2 config correctly. **Not yet verified live** — needs an actual `wrangler dev`/deploy run with Docker (confirmed available locally) to exercise a real clone + install + test/build inside the Sandbox; that's the next thing to check before calling this done end-to-end.
+
+Phases 1–5 (agent scaffold, codebase context, conversational new-backlog, conversational move, container escalation) are all in place. Nothing else is currently planned for this spec — see `plans/backlog/multi-user-and-launch.md` for what's next for the app.
 
 ## Approach
 
@@ -117,12 +127,12 @@ Each slice ships value on its own:
 - [x] Conversational **new backlog item**: Q&A → `emit_backlog_item` → existing rendered preview → `commitBacklogItem`.
 - [x] Conversational **move**: Q&A → `propose_move` → existing diff preview (editable) → `commitPlanMove`.
 - [ ] `waitForApproval()` gate wired to the preview UI. **Deviation:** built a bespoke `ask_user`/`answer` WebSocket protocol instead of the Agents SDK's `waitForApproval()` primitive — same effect (pause for human input mid-conversation), simpler to reason about given the DO already had a raw-message protocol from slice 1.
-- [ ] Container / Sandbox escalation behind a Workflow for run-code tasks.
-- [ ] Tests: agent tool handlers, context cache + invalidation, and the Q&A → preview → commit path. Unit tests exist for the pure pieces (`parseInstanceName`, prompt builders, `completeToolTurn`); `FlueAgent` itself (a Durable Object) has no direct unit tests yet — only live/manual verification.
+- [x] Container / Sandbox escalation behind a Workflow for run-code tasks — a `done` move's "verify" step (slice 5). Not (and never meant to be) general run-arbitrary-code support.
+- [ ] Tests: agent tool handlers, context cache + invalidation, and the Q&A → preview → commit path. Unit tests exist for the pure pieces (`parseInstanceName`, prompt builders, `completeToolTurn`); `FlueAgent` and `VerifyPlanMoveWorkflow` (both stateful — a Durable Object and a Workflow) have no direct unit tests yet — only live/manual verification.
 
 ## Open questions
 
 - **Per-repo DO scale:** is one agent per repo fine at "hundreds of repos," or does context-cache size / hot-repo contention push us toward per-conversation instances? (Start per-repo; revisit if state grows.)
-- **Container trigger:** what concretely flips a task from API-only to a clone-in-container run? (Provisional: only when the user/agent needs to build or run tests.)
+- ~~**Container trigger**~~ Resolved (slice 5): a move to `done` — verifying `test`/`build` actually pass. No other trigger exists yet; add one only when a concrete feature needs to run code.
 - **Context budget:** how much repo content goes into a prompt before cost/latency bites — a curated-files heuristic now vs. a retrieval/index step (Vectorize) later.
 - **Cost / quotas:** agent runs (and containers) are heavier than one-shot calls; this needs to land alongside the quota work in `plans/backlog/multi-user-and-launch.md`.

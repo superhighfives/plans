@@ -2,8 +2,15 @@ import { notFound } from '@tanstack/react-router'
 import { createServerFn } from '@tanstack/react-start'
 import { getDb } from '~/db'
 import { getEnv } from '~/env'
+import { newId } from '~/lib/crypto'
 import { isPlanPath } from '~/lib/plans/states'
-import type { PlanDetail, PlanView, RepoPlans } from '~/lib/plans/types'
+import type {
+  PlanDetail,
+  PlanView,
+  RepoPlans,
+  VerifyMoveStatus,
+  VerifyPlanMoveResult,
+} from '~/lib/plans/types'
 import { authMiddleware } from './auth-middleware'
 import {
   type CreatePlanResult,
@@ -241,6 +248,82 @@ export const commitMove = createServerFn({ method: 'POST' })
       newContent: data.newContent,
       baseSha: data.baseSha,
     })
+  })
+
+/**
+ * Start a "move to done" verification run: clones the repo's default branch
+ * into an ephemeral Sandbox, installs its dependencies, and runs whichever
+ * test/build scripts it has — slice 5's "container escalation," gated behind
+ * a Workflow since clone+install+test/build can take minutes. Returns an
+ * instance id for `getVerifyMoveStatus` to poll. Enforces per-user repo access.
+ */
+export const startVerifyMove = createServerFn({ method: 'POST' })
+  .middleware([authMiddleware])
+  .validator(validateRepoInput)
+  .handler(async ({ context, data }): Promise<{ instanceId: string }> => {
+    const db = getDb()
+    const ctx = await resolveAccessibleRepo(
+      db,
+      context.user.id,
+      data.owner,
+      data.repo,
+    )
+    if (!ctx) throw notFound()
+
+    const env = getEnv()
+    const instanceId = newId()
+    await env.VERIFY_PLAN_MOVE_WORKFLOW.create({
+      id: instanceId,
+      params: {
+        installationId: ctx.installation.id,
+        owner: ctx.repo.owner,
+        repoName: ctx.repo.name,
+        defaultBranch: ctx.repo.defaultBranch,
+      },
+    })
+    return { instanceId }
+  })
+
+interface VerifyMoveStatusInput extends RepoInput {
+  instanceId: string
+}
+
+/** Poll a verification run started by `startVerifyMove`. Enforces per-user repo access. */
+export const getVerifyMoveStatus = createServerFn({ method: 'GET' })
+  .middleware([authMiddleware])
+  .validator((data: VerifyMoveStatusInput): VerifyMoveStatusInput => {
+    const base = validateRepoInput(data)
+    if (typeof data.instanceId !== 'string' || !data.instanceId)
+      throw new Error('instanceId is required')
+    return { ...base, instanceId: data.instanceId }
+  })
+  .handler(async ({ context, data }): Promise<VerifyMoveStatus> => {
+    const db = getDb()
+    const ctx = await resolveAccessibleRepo(
+      db,
+      context.user.id,
+      data.owner,
+      data.repo,
+    )
+    if (!ctx) throw notFound()
+
+    const env = getEnv()
+    const instance = await env.VERIFY_PLAN_MOVE_WORKFLOW.get(data.instanceId)
+    const details = await instance.status()
+
+    if (details.status === 'complete') {
+      return {
+        status: 'complete',
+        result: details.output as VerifyPlanMoveResult,
+      }
+    }
+    if (details.status === 'errored' || details.status === 'terminated') {
+      return {
+        status: 'errored',
+        message: details.error?.message ?? 'Verification failed unexpectedly.',
+      }
+    }
+    return { status: 'running' }
   })
 
 /** Commit an approved new backlog item. Enforces per-user repo access. */
