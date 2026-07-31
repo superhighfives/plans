@@ -190,6 +190,10 @@ npm run db:migrate:local   # apply migrations to local D1
 npm run dev                # http://localhost:5173
 ```
 
+Exercising the "move to done" verify flow locally requires a container
+runtime (Docker) — `wrangler dev` uses it to run the `Sandbox` container that
+clones, installs, and runs a repo's `test`/`build` scripts.
+
 ### 5. Deploy
 
 Pushes to `main` deploy automatically via GitHub Actions

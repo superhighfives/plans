@@ -1,6 +1,6 @@
 import { createFileRoute, Link, useRouter } from '@tanstack/react-router'
 import { useAgent } from 'agents/react'
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import { stripRedundantHeading } from '~/lib/plans/body'
@@ -15,11 +15,14 @@ import type {
   PlanBranchTab,
   PlanMovePreview,
   PlanView,
+  VerifyPlanMoveResult,
 } from '~/lib/plans/types'
 import {
   commitMove,
   getPlanSource,
   getPlanView,
+  getVerifyMoveStatus,
+  startVerifyMove,
   updatePlan,
 } from '~/server/repo.functions'
 
@@ -223,7 +226,63 @@ function PlanMoveControl({
   const [committing, setCommitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
+  // "Move to done" verification (slice 5): clone into a Sandbox, run the
+  // repo's own test/build scripts, gate the commit on the result.
+  const [verifying, setVerifying] = useState(false)
+  const [verifyResult, setVerifyResult] = useState<VerifyPlanMoveResult | null>(
+    null,
+  )
+  const [verifyError, setVerifyError] = useState<string | null>(null)
+  const [overrideVerify, setOverrideVerify] = useState(false)
+
   const targets = PLAN_STATES.filter((s) => s !== fromState)
+
+  const mountedRef = useRef(true)
+  useEffect(
+    () => () => {
+      mountedRef.current = false
+    },
+    [],
+  )
+
+  function resetVerify() {
+    setVerifying(false)
+    setVerifyResult(null)
+    setVerifyError(null)
+    setOverrideVerify(false)
+  }
+
+  async function runVerify() {
+    setVerifying(true)
+    setVerifyError(null)
+    setVerifyResult(null)
+    setOverrideVerify(false)
+    try {
+      const { instanceId } = await startVerifyMove({ data: { owner, repo } })
+      // Poll until the workflow finishes — clone + install + test/build can
+      // take minutes, well past a single request.
+      while (mountedRef.current) {
+        await new Promise((resolve) => setTimeout(resolve, 3000))
+        if (!mountedRef.current) break
+        const status = await getVerifyMoveStatus({
+          data: { owner, repo, instanceId },
+        })
+        if (status.status === 'complete') {
+          setVerifyResult(status.result)
+          break
+        }
+        if (status.status === 'errored') {
+          setVerifyError(status.message)
+          break
+        }
+      }
+    } catch {
+      if (mountedRef.current)
+        setVerifyError("Couldn't run verification — try again.")
+    } finally {
+      if (mountedRef.current) setVerifying(false)
+    }
+  }
 
   const flue = useAgent({
     agent: 'flue-agent',
@@ -260,6 +319,7 @@ function PlanMoveControl({
         setPreview(result)
         setContent(result.newContent)
         setPreviewMode('diff')
+        resetVerify()
       } else if (msg.type === 'error') {
         setBusy(false)
         setError("Flue couldn't draft the move — try again.")
@@ -277,6 +337,7 @@ function PlanMoveControl({
     setError(null)
     setPreview(null)
     setQuestion(null)
+    resetVerify()
     try {
       await flue.ready
       flue.send(JSON.stringify({ type: 'draft_move', path, toState, context }))
@@ -404,20 +465,39 @@ function PlanMoveControl({
             No textual changes — only the state and status move.
           </p>
         )}
+        {preview.toState === 'done' ? (
+          <VerifyMoveControl
+            verifying={verifying}
+            result={verifyResult}
+            error={verifyError}
+            override={overrideVerify}
+            onRun={runVerify}
+            onOverrideChange={setOverrideVerify}
+          />
+        ) : null}
         {error ? <p className="plan-editor__error">{error}</p> : null}
         <div className="plan-editor__bar">
           <button
             type="button"
             className="btn"
             onClick={approve}
-            disabled={committing || preview.destinationExists}
+            disabled={
+              committing ||
+              preview.destinationExists ||
+              (preview.toState === 'done' &&
+                !verifyResult?.ok &&
+                !overrideVerify)
+            }
           >
             {committing ? 'Committing…' : 'Approve & commit'}
           </button>
           <button
             type="button"
             className="btn btn--ghost"
-            onClick={() => setPreview(null)}
+            onClick={() => {
+              setPreview(null)
+              resetVerify()
+            }}
             disabled={committing}
           >
             Discard
@@ -495,6 +575,96 @@ function PlanMoveControl({
         ))}
       </div>
       {error ? <p className="plan-editor__error">{error}</p> : null}
+    </div>
+  )
+}
+
+/**
+ * Slice 5's "container escalation" for a move to `done`: clones the repo's
+ * default branch into an ephemeral Sandbox (via a Workflow — clone + install
+ * + test/build can take minutes) and runs its own test/build scripts, so the
+ * author sees them actually pass before committing rather than trusting the
+ * move preview's prose. Gates `PlanMoveControl`'s approve button; never
+ * touches the plan or the commit path itself.
+ */
+function VerifyMoveControl({
+  verifying,
+  result,
+  error,
+  override,
+  onRun,
+  onOverrideChange,
+}: {
+  verifying: boolean
+  result: VerifyPlanMoveResult | null
+  error: string | null
+  override: boolean
+  onRun: () => void
+  onOverrideChange: (value: boolean) => void
+}) {
+  const needsOverride = !result?.ok
+
+  return (
+    <div className="move__verify">
+      <div className="move__verify-bar">
+        <button
+          type="button"
+          className="btn btn--ghost"
+          onClick={onRun}
+          disabled={verifying}
+        >
+          {verifying
+            ? 'Running tests & build…'
+            : result || error
+              ? 'Run again'
+              : 'Run tests & build before committing'}
+        </button>
+        {verifying ? (
+          <span className="muted">
+            Cloning the repo and running its scripts — this can take a few
+            minutes.
+          </span>
+        ) : null}
+      </div>
+      {error ? <p className="plan-editor__error">{error}</p> : null}
+      {result ? (
+        result.ranScripts.length === 0 ? (
+          <p className="move__warn">
+            No <code>test</code> or <code>build</code> script found in this
+            repo's package.json — nothing to verify.
+          </p>
+        ) : (
+          <ul className="move__verify-steps">
+            {result.steps.map((step) => (
+              <li
+                key={step.name}
+                className={
+                  step.success
+                    ? 'move__verify-step move__verify-step--ok'
+                    : 'move__verify-step move__verify-step--fail'
+                }
+              >
+                <strong>
+                  {step.success ? '✓' : '✗'} {step.command ?? step.name}
+                </strong>
+                {!step.success && step.logTail ? (
+                  <pre className="move__verify-log">{step.logTail}</pre>
+                ) : null}
+              </li>
+            ))}
+          </ul>
+        )
+      ) : null}
+      {needsOverride ? (
+        <label className="move__verify-override">
+          <input
+            type="checkbox"
+            checked={override}
+            onChange={(e) => onOverrideChange(e.target.checked)}
+          />
+          Commit anyway
+        </label>
+      ) : null}
     </div>
   )
 }

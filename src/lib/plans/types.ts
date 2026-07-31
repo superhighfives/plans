@@ -131,3 +131,33 @@ export interface RepoPlans {
   branchActivity: PullRequestActivity[]
   branchActivityStatus: BranchActivityStatus
 }
+
+/**
+ * One command `VerifyPlanMoveWorkflow` ran in the sandbox, safe to show the
+ * author (see `~/workflows/verify-plan-move` for how these are produced).
+ */
+export interface VerifyStepResult {
+  name: string
+  /** Null for the clone step — its command embeds credentials, so it's never surfaced. */
+  command: string | null
+  exitCode: number
+  success: boolean
+  /** Last ~4000 chars of combined stdout+stderr. */
+  logTail: string
+}
+
+/** Result of cloning a repo into a Sandbox and running its test/build scripts
+ * — gates a plan's move to `done` (slice 5's "container escalation"). */
+export interface VerifyPlanMoveResult {
+  /** True only if at least one script ran and every one exited 0. */
+  ok: boolean
+  /** Which package.json scripts were actually found and run. */
+  ranScripts: string[]
+  steps: VerifyStepResult[]
+}
+
+/** Poll result for an in-flight `VerifyPlanMoveWorkflow` instance. */
+export type VerifyMoveStatus =
+  | { status: 'running' }
+  | { status: 'complete'; result: VerifyPlanMoveResult }
+  | { status: 'errored'; message: string }
