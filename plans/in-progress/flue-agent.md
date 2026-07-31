@@ -46,11 +46,18 @@ This is also the CMS's first **stateful/agentic** feature. It reuses two things 
 - `src/lib/ai/gateway.ts` — `completeToolTurn`: one turn of a multi-tool conversation, `tool_choice: "any"` so the model must answer via one of the given tools (never prose). Returns the raw content blocks (to echo back next turn) plus the chosen `{id, name, input}`.
 - `src/lib/ai/plan-prompts.ts` — `ASK_USER_TOOL` (a single clarifying question) and `buildConversationalBacklogPrompt` (the backlog-stage framing plus the repo's curated codebase context folded into the prompt).
 - `src/server/plans.server.ts` — extracted `buildBacklogPreview` (slug/path derivation + frontmatter) out of `proposeNewBacklog` so the one-shot and conversational paths share it; nothing about committing changed.
-- `FlueAgent` now handles `{type:'draft_backlog', idea}`: loads the cache-first codebase context (same path as `context`), then loops the model between `ask_user` (pauses, sends `{type:'question'}`, resumed by `{type:'answer'}`) and `emit_backlog_item` (packages the draft via `buildBacklogPreview`, sends `{type:'preview', ...}`). Conversation state lives in-memory per connection id; `onClose` drops it.
+- `FlueAgent` now handles `{type:'draft_backlog', idea}`: loads the cache-first codebase context (same path as `context`), then loops the model between `ask_user` (pauses, sends `{type:'question'}`, resumed by `{type:'answer'}`) and `emit_backlog_item` (packages the draft via `buildBacklogPreview`, sends `{type:'preview', ...}`). Conversation state is keyed by connection id, persisted in the DO's SQLite (not an in-memory field — post-review fix: this DO hibernates between messages, and `ask_user` pauses across exactly that gap); `onClose` drops it.
 - Client: `NewBacklogItem` now drives the whole flow over the Flue socket (replacing the old one-shot `proposeBacklogItem` call and the separate `FluePing` status line) — a question step renders inline when Flue asks one, then lands on the same preview → `commitBacklogItem` approval UI as before.
 - Verified: typecheck + biome clean, 103 tests (7 new — `completeToolTurn`, `ASK_USER_TOOL`, `buildConversationalBacklogPrompt`), build exports `FlueAgent`. Live end-to-end (real conversation over the preview env) not yet run.
 
-**Next: slice 4 — conversational move** (same `ask_user` pattern → existing diff preview → `commitPlanMove`).
+**Slice 4 — conversational move: DONE (server side).**
+- `src/lib/ai/plan-prompts.ts` — exported `MOVE_SYSTEM`/`transitionGuidance` (previously module-private) for reuse; added `PROPOSE_MOVE_TOOL` (submits the rewritten body) and `buildConversationalMovePrompt` (same transition framing as `buildMovePrompt`, plus codebase context and the `ask_user` option).
+- `src/server/plans.server.ts` — extracted `buildMovePreview` (frontmatter re-attach, destination path, diff, destination-exists check) out of `proposePlanMove` so the one-shot and conversational paths share it; nothing about committing changed.
+- `FlueAgent`'s draft state is now a `{kind: 'backlog'} | {kind: 'move'}` union in the same SQLite-backed `drafts` table. `{type:'draft_move', path, toState, context}` loads the plan source + cached codebase context, then loops `ask_user` / `propose_move` the same way the backlog draft loops `ask_user` / `emit_backlog_item`; the finished body is packaged via `buildMovePreview` and sent as `{type:'move_preview', ...}`.
+- Client: `PlanMoveControl` now drives the move over the Flue socket instead of the one-shot `proposeMove` call — a question step renders inline (labeled with the target state) when Flue asks one, then lands on the same diff/edit preview → `commitMove` approval UI as before.
+- Verified: typecheck + biome clean, 106 tests (3 new — `PROPOSE_MOVE_TOOL`, `buildConversationalMovePrompt`), build exports `FlueAgent`. Live end-to-end (real conversation over the preview env) not yet run.
+
+**Next: slice 5 — container escalation** (Workflow + Sandbox clone for run-code tasks, only when needed).
 
 ## Approach
 

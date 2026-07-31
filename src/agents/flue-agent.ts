@@ -10,28 +10,53 @@ import {
 import {
   ASK_USER_TOOL,
   buildConversationalBacklogPrompt,
+  buildConversationalMovePrompt,
   NEW_BACKLOG_TOOL,
+  PROPOSE_MOVE_TOOL,
 } from '~/lib/ai/plan-prompts'
 import { getInstallationToken } from '~/lib/github/app'
 import { fetchRepoTree } from '~/lib/github/tree'
+import { type Frontmatter, parseFrontmatter } from '~/lib/plans/frontmatter'
+import { PLAN_STATES, type PlanState, parsePlanPath } from '~/lib/plans/states'
 import { type CodebaseFile, fetchContextFiles } from '~/server/codebase.server'
 import {
   buildBacklogPreview,
+  buildMovePreview,
   findRepoContext,
+  loadPlanSource,
+  type PlanSource,
   type RepoContext,
 } from '~/server/plans.server'
 import { parseInstanceName } from './instance'
 
 /** Tools offered every turn of the conversational new-backlog draft. */
-const DRAFT_TOOLS = [ASK_USER_TOOL, NEW_BACKLOG_TOOL]
+const BACKLOG_DRAFT_TOOLS = [ASK_USER_TOOL, NEW_BACKLOG_TOOL]
+/** Tools offered every turn of the conversational move draft. */
+const MOVE_DRAFT_TOOLS = [ASK_USER_TOOL, PROPOSE_MOVE_TOOL]
 
-/** An in-flight new-backlog draft conversation, keyed by connection id. */
-interface DraftState {
-  system: string
-  repo: Repo
-  installation: Installation
-  messages: AiMessage[]
-}
+/** An in-flight conversational draft, keyed by connection id. Either a new
+ * backlog item or a state move — same ask_user-then-emit shape, different
+ * finishing tool and packaging. */
+type DraftState =
+  | {
+      kind: 'backlog'
+      system: string
+      repo: Repo
+      installation: Installation
+      messages: AiMessage[]
+    }
+  | {
+      kind: 'move'
+      system: string
+      repo: Repo
+      installation: Installation
+      path: string
+      toState: PlanState
+      title: string
+      source: PlanSource
+      frontmatter: Frontmatter
+      messages: AiMessage[]
+    }
 
 /**
  * Flue — the per-repo conversational agent (Cloudflare Agents SDK).
@@ -39,17 +64,28 @@ interface DraftState {
  * One Durable Object instance per repo, named `owner~repo`. Slice 2 gave it
  * codebase awareness (a `context` message reads the repo's curated
  * stack/config/docs files via the installation token, cached in its own
- * SQLite keyed by tree sha). Slice 3 adds the conversational new-backlog
- * draft: `draft_backlog` starts a Q&A loop — the model answers each turn via
- * either `ask_user` (paused, forwarded to the client, resumed by an `answer`
- * message) or `emit_backlog_item` (ends the loop) — grounded in that cached
- * codebase context. The finished draft is packaged the same way the one-shot
- * `proposeNewBacklog` path is, so the existing preview/commit UI and
- * `commitBacklogItem` need no changes.
+ * SQLite keyed by tree sha). Slices 3 and 4 add two conversational drafts —
+ * `draft_backlog` (a new backlog item from a rough idea) and `draft_move` (a
+ * plan's state-transition rewrite) — both the same Q&A loop shape: the model
+ * answers each turn via either `ask_user` (paused, forwarded to the client,
+ * resumed by an `answer` message) or its finishing tool (`emit_backlog_item` /
+ * `propose_move`), grounded in the cached codebase context. Each finished
+ * draft is packaged via a shared helper (`buildBacklogPreview` /
+ * `buildMovePreview`) so the existing preview/commit UI and
+ * `commitBacklogItem` / `commitPlanMove` need no changes. (The one-shot
+ * `proposeNewBacklog` / `proposePlanMove` predecessors these draw from were
+ * removed once slice 4 shipped — nothing called them anymore.)
  */
 export class FlueAgent extends Agent {
   async onMessage(connection: Connection, message: WSMessage) {
-    let parsed: { type?: string; idea?: string; answer?: string } = {}
+    let parsed: {
+      type?: string
+      idea?: string
+      answer?: string
+      path?: string
+      toState?: string
+      context?: string
+    } = {}
     try {
       if (typeof message === 'string') parsed = JSON.parse(message)
     } catch {
@@ -63,7 +99,15 @@ export class FlueAgent extends Agent {
     if (parsed.type === 'draft_backlog') {
       const idea = parsed.idea?.trim()
       if (!idea) return this.fail(connection, 'idea-required')
-      await this.startDraft(connection, idea)
+      await this.startBacklogDraft(connection, idea)
+      return
+    }
+    if (parsed.type === 'draft_move') {
+      const path = parsed.path?.trim()
+      const toState = parsed.toState as PlanState | undefined
+      if (!path || !toState || !PLAN_STATES.includes(toState))
+        return this.fail(connection, 'move-target-required')
+      await this.startMoveDraft(connection, path, toState, parsed.context)
       return
     }
     if (parsed.type === 'answer') {
@@ -118,7 +162,7 @@ export class FlueAgent extends Agent {
   }
 
   /** Start a conversational new-backlog draft: first model turn from the idea + codebase context. */
-  private async startDraft(connection: Connection, idea: string) {
+  private async startBacklogDraft(connection: Connection, idea: string) {
     const ref = parseInstanceName(this.name)
     if (!ref) return this.fail(connection, 'bad-instance')
 
@@ -139,10 +183,11 @@ export class FlueAgent extends Agent {
       const result = await completeToolTurn(env, {
         system,
         messages,
-        tools: DRAFT_TOOLS,
+        tools: BACKLOG_DRAFT_TOOLS,
       })
 
       this.writeDraft(connection.id, {
+        kind: 'backlog',
         system,
         repo: ctx.repo,
         installation: ctx.installation,
@@ -151,6 +196,70 @@ export class FlueAgent extends Agent {
       await this.handleDraftTurn(connection, result)
     } catch (err) {
       console.error('Flue draft_backlog failed', err)
+      this.fail(connection, 'draft-failed')
+    }
+  }
+
+  /** Start a conversational move draft: first model turn from the plan's current body + codebase context. */
+  private async startMoveDraft(
+    connection: Connection,
+    path: string,
+    toState: PlanState,
+    context: string | undefined,
+  ) {
+    const ref = parseInstanceName(this.name)
+    if (!ref) return this.fail(connection, 'bad-instance')
+
+    try {
+      const env = getEnv()
+      const db = getDb()
+      const ctx = await findRepoContext(db, ref.owner, ref.repo)
+      if (!ctx) return this.fail(connection, 'repo-not-found')
+
+      const info = parsePlanPath(path)
+      if (!info) return this.fail(connection, 'not-a-plan-path')
+      if (info.state === toState)
+        return this.fail(connection, 'already-in-state')
+
+      const source = await loadPlanSource(db, env, ctx, path)
+      if (!source) return this.fail(connection, 'plan-not-found')
+
+      const frontmatterParsed = parseFrontmatter(source.content)
+      const title = frontmatterParsed.data.title ?? info.slug
+
+      const token = await getInstallationToken(db, env, ctx.installation)
+      const { files } = await this.loadContext(token, ctx)
+
+      const { system, prompt } = buildConversationalMovePrompt({
+        title,
+        fromState: info.state,
+        toState,
+        body: frontmatterParsed.content,
+        context,
+        codebaseContext: files,
+      })
+      const messages: AiMessage[] = [{ role: 'user', content: prompt }]
+      const result = await completeToolTurn(env, {
+        system,
+        messages,
+        tools: MOVE_DRAFT_TOOLS,
+      })
+
+      this.writeDraft(connection.id, {
+        kind: 'move',
+        system,
+        repo: ctx.repo,
+        installation: ctx.installation,
+        path,
+        toState,
+        title,
+        source,
+        frontmatter: frontmatterParsed.data,
+        messages: [...messages, { role: 'assistant', content: result.content }],
+      })
+      await this.handleDraftTurn(connection, result)
+    } catch (err) {
+      console.error('Flue draft_move failed', err)
       this.fail(connection, 'draft-failed')
     }
   }
@@ -178,7 +287,8 @@ export class FlueAgent extends Agent {
       const result = await completeToolTurn(env, {
         system: state.system,
         messages,
-        tools: DRAFT_TOOLS,
+        tools:
+          state.kind === 'backlog' ? BACKLOG_DRAFT_TOOLS : MOVE_DRAFT_TOOLS,
       })
 
       this.writeDraft(connection.id, {
@@ -209,10 +319,29 @@ export class FlueAgent extends Agent {
 
     const env = getEnv()
     const db = getDb()
-    const token = await getInstallationToken(db, env, state.installation)
-    const draft = result.toolCall.input as { title: string; body: string }
-    const preview = await buildBacklogPreview(token, state.repo, draft)
-    connection.send(JSON.stringify({ type: 'preview', ...preview }))
+    const ctx: RepoContext = {
+      repo: state.repo,
+      installation: state.installation,
+    }
+
+    if (state.kind === 'backlog') {
+      const token = await getInstallationToken(db, env, state.installation)
+      const draft = result.toolCall.input as { title: string; body: string }
+      const preview = await buildBacklogPreview(token, state.repo, draft)
+      connection.send(JSON.stringify({ type: 'preview', ...preview }))
+      return
+    }
+
+    const { body } = result.toolCall.input as { body: string }
+    const preview = await buildMovePreview(db, env, ctx, {
+      path: state.path,
+      toState: state.toState,
+      title: state.title,
+      source: state.source,
+      frontmatter: state.frontmatter,
+      newBody: body,
+    })
+    connection.send(JSON.stringify({ type: 'move_preview', ...preview }))
   }
 
   /** Load (cache-first) this repo's codebase context: tree + curated files. */

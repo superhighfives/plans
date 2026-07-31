@@ -2,14 +2,8 @@ import { notFound } from '@tanstack/react-router'
 import { createServerFn } from '@tanstack/react-start'
 import { getDb } from '~/db'
 import { getEnv } from '~/env'
-import { isPlanPath, isPlanState, type PlanState } from '~/lib/plans/states'
-import type {
-  NewBacklogPreview,
-  PlanDetail,
-  PlanMovePreview,
-  PlanView,
-  RepoPlans,
-} from '~/lib/plans/types'
+import { isPlanPath } from '~/lib/plans/states'
+import type { PlanDetail, PlanView, RepoPlans } from '~/lib/plans/types'
 import { authMiddleware } from './auth-middleware'
 import {
   type CreatePlanResult,
@@ -21,8 +15,6 @@ import {
   loadRepoPlans,
   type MovePlanResult,
   type PlanSource,
-  proposeNewBacklog,
-  proposePlanMove,
   resolveAccessibleRepo,
   type WritePlanResult,
   writePlan,
@@ -49,23 +41,11 @@ interface UpdatePlanInput extends PlanInput {
   baseSha: string
 }
 
-interface ProposeMoveInput extends PlanInput {
-  /** The lifecycle state to move the plan into. */
-  toState: PlanState
-  /** Optional extra context to steer the AI rewrite. */
-  context: string
-}
-
 interface CommitMoveInput extends RepoInput {
   oldPath: string
   newPath: string
   newContent: string
   baseSha: string
-}
-
-interface ProposeBacklogInput extends RepoInput {
-  /** The rough idea the AI fleshes into a backlog item. */
-  idea: string
 }
 
 interface CommitBacklogInput extends RepoInput {
@@ -227,43 +207,6 @@ export const updatePlan = createServerFn({ method: 'POST' })
     )
   })
 
-/**
- * Draft (but don't commit) an AI move of a plan to a new state. Returns a
- * preview + diff for the user to approve. Enforces per-user repo access.
- */
-export const proposeMove = createServerFn({ method: 'POST' })
-  .middleware([authMiddleware])
-  .validator((data: ProposeMoveInput): ProposeMoveInput => {
-    const base = validateRepoInput(data)
-    if (!data?.path || !isPlanPath(data.path)) throw notFound()
-    if (!data?.toState || !isPlanState(data.toState))
-      throw new Error('a valid toState is required')
-    return {
-      ...base,
-      path: data.path,
-      toState: data.toState,
-      context: typeof data.context === 'string' ? data.context : '',
-    }
-  })
-  .handler(async ({ context, data }): Promise<PlanMovePreview> => {
-    const db = getDb()
-    const ctx = await resolveAccessibleRepo(
-      db,
-      context.user.id,
-      data.owner,
-      data.repo,
-    )
-    if (!ctx) throw notFound()
-    return proposePlanMove(
-      db,
-      getEnv(),
-      ctx,
-      data.path,
-      data.toState,
-      data.context,
-    )
-  })
-
 /** Commit an approved move as one atomic commit. Enforces per-user repo access. */
 export const commitMove = createServerFn({ method: 'POST' })
   .middleware([authMiddleware])
@@ -298,31 +241,6 @@ export const commitMove = createServerFn({ method: 'POST' })
       newContent: data.newContent,
       baseSha: data.baseSha,
     })
-  })
-
-/**
- * Draft (but don't commit) a new backlog item from a rough idea. Returns a
- * preview (proposed title + body + destination path) for the user to approve.
- * Enforces per-user repo access.
- */
-export const proposeBacklogItem = createServerFn({ method: 'POST' })
-  .middleware([authMiddleware])
-  .validator((data: ProposeBacklogInput): ProposeBacklogInput => {
-    const base = validateRepoInput(data)
-    if (typeof data.idea !== 'string' || data.idea.trim().length === 0)
-      throw new Error('an idea is required')
-    return { ...base, idea: data.idea }
-  })
-  .handler(async ({ context, data }): Promise<NewBacklogPreview> => {
-    const db = getDb()
-    const ctx = await resolveAccessibleRepo(
-      db,
-      context.user.id,
-      data.owner,
-      data.repo,
-    )
-    if (!ctx) throw notFound()
-    return proposeNewBacklog(db, getEnv(), ctx, data.idea)
   })
 
 /** Commit an approved new backlog item. Enforces per-user repo access. */

@@ -2,10 +2,10 @@ import { describe, expect, it } from 'vitest'
 import {
   ASK_USER_TOOL,
   buildConversationalBacklogPrompt,
-  buildMovePrompt,
-  buildNewBacklogPrompt,
+  buildConversationalMovePrompt,
   findOpenQuestions,
   NEW_BACKLOG_TOOL,
+  PROPOSE_MOVE_TOOL,
 } from './plan-prompts'
 
 describe('findOpenQuestions', () => {
@@ -36,49 +36,49 @@ describe('findOpenQuestions', () => {
   })
 })
 
-describe('buildMovePrompt', () => {
-  it('embeds the body, transition, and optional context', () => {
-    const { system, prompt } = buildMovePrompt({
+describe('PROPOSE_MOVE_TOOL', () => {
+  it('exposes a tool schema requiring a body', () => {
+    expect(PROPOSE_MOVE_TOOL.name).toBe('propose_move')
+    expect(PROPOSE_MOVE_TOOL.input_schema.required).toEqual(['body'])
+  })
+})
+
+describe('buildConversationalMovePrompt', () => {
+  it('embeds the transition guidance, body, and both tool names', () => {
+    const { system, prompt } = buildConversationalMovePrompt({
       title: 'My Plan',
       fromState: 'backlog',
       toState: 'ready',
       body: 'A rough idea about caching.',
       context: 'Use D1 for storage.',
+      codebaseContext: [],
     })
-    expect(system).toContain('ONLY the new markdown body')
+    expect(system).toContain('ask_user')
+    expect(system).toContain('propose_move')
+    expect(system).toContain('never reply in plain text')
     expect(prompt).toContain('My Plan')
     expect(prompt).toContain('A rough idea about caching.')
     expect(prompt).toContain('Use D1 for storage.')
     // backlog → ready promotes into a full spec.
     expect(prompt).toContain('## Tasks')
+    expect(prompt).not.toContain('codebase context')
   })
 
-  it('omits the context section when none is given', () => {
-    const { prompt } = buildMovePrompt({
-      title: 'P',
-      fromState: 'in-progress',
-      toState: 'done',
+  it('folds curated codebase files into the prompt when given', () => {
+    const { prompt } = buildConversationalMovePrompt({
+      title: 'My Plan',
+      fromState: 'ready',
+      toState: 'in-progress',
       body: 'body',
+      codebaseContext: [{ path: 'package.json', text: '{"name":"demo"}' }],
     })
-    expect(prompt).not.toContain('Extra context from the author')
-    expect(prompt).toContain('What was built')
+    expect(prompt).toContain('codebase context')
+    expect(prompt).toContain('### package.json')
+    expect(prompt).toContain('{"name":"demo"}')
   })
 })
 
-describe('buildNewBacklogPrompt', () => {
-  it('embeds the idea and keeps it a backlog-stage draft', () => {
-    const { system, prompt } = buildNewBacklogPrompt({
-      idea: '  A way to bulk-archive old plans.  ',
-    })
-    // Backlog stage is rough, not a full spec.
-    expect(system).toContain('BACKLOG-stage')
-    expect(system).toContain('NOT a finished spec')
-    expect(system).toContain('Open questions')
-    // The idea is embedded, trimmed.
-    expect(prompt).toContain('A way to bulk-archive old plans.')
-    expect(prompt).toContain('emit_backlog_item')
-  })
-
+describe('NEW_BACKLOG_TOOL', () => {
   it('exposes a tool schema requiring title and body', () => {
     expect(NEW_BACKLOG_TOOL.name).toBe('emit_backlog_item')
     expect(NEW_BACKLOG_TOOL.input_schema.required).toEqual(['title', 'body'])

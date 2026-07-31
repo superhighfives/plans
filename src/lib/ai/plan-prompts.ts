@@ -1,7 +1,7 @@
 import { type PlanState, planStateDef } from '~/lib/plans/states'
 import type { AiTool } from './gateway'
 
-const SYSTEM = `You are a meticulous engineering planner maintaining a repository's implementation specs.
+export const MOVE_SYSTEM = `You are a meticulous engineering planner maintaining a repository's implementation specs.
 
 You rewrite a plan's markdown BODY when it moves between lifecycle states (backlog → ready → in-progress → done). Rules:
 - Output ONLY the new markdown body. No frontmatter (no leading --- block), no code fence around the whole thing, no preamble, no closing commentary.
@@ -10,7 +10,7 @@ You rewrite a plan's markdown BODY when it moves between lifecycle states (backl
 - If information is genuinely missing, leave a clearly-marked open question rather than fabricating an answer.`
 
 /** Per-transition guidance. Directionality matters: forward = elaborate, backward = condense. */
-function transitionGuidance(from: PlanState, to: PlanState): string {
+export function transitionGuidance(from: PlanState, to: PlanState): string {
   const key = `${from}->${to}`
   switch (key) {
     case 'backlog->ready':
@@ -47,42 +47,6 @@ If the plan's original tasks are now complete, mark them done.`
   }
 }
 
-/**
- * Build the prompt to rewrite a plan's body for a state transition. The server
- * re-attaches and normalizes frontmatter (status + updated) afterward, so the
- * model only ever touches the body.
- */
-export function buildMovePrompt(opts: {
-  title: string
-  fromState: PlanState
-  toState: PlanState
-  body: string
-  /** Optional extra context the user typed alongside the move. */
-  context?: string
-}): { system: string; prompt: string } {
-  const { title, fromState, toState, body, context } = opts
-  const prompt = [
-    `Plan title: ${title}`,
-    `Moving from "${planStateDef(fromState).label}" to "${planStateDef(toState).label}".`,
-    '',
-    transitionGuidance(fromState, toState),
-    '',
-    context?.trim()
-      ? `Extra context from the author (weave it in where relevant):\n${context.trim()}`
-      : null,
-    '',
-    'Current plan body:',
-    '"""',
-    body,
-    '"""',
-    '',
-    'Return the rewritten body only.',
-  ]
-    .filter((line) => line !== null)
-    .join('\n')
-  return { system: SYSTEM, prompt }
-}
-
 const NEW_BACKLOG_SYSTEM = `You are a meticulous engineering planner helping seed a repository's backlog.
 
 You turn a rough idea into a BACKLOG-stage plan — an early, unscoped note, NOT a finished spec. Fleshing it into a full spec happens later, when it's promoted to "ready". Rules:
@@ -114,28 +78,6 @@ export const NEW_BACKLOG_TOOL: AiTool = {
 }
 
 /**
- * Build the prompt to draft a new backlog item from a rough idea. The model
- * answers via {@link NEW_BACKLOG_TOOL}; the server slugifies the returned title
- * and attaches frontmatter (status: Backlog, created/updated: today).
- */
-export function buildNewBacklogPrompt(opts: { idea: string }): {
-  system: string
-  prompt: string
-} {
-  const prompt = [
-    'Turn this rough idea into a backlog-stage plan.',
-    '',
-    'Rough idea from the author:',
-    '"""',
-    opts.idea.trim(),
-    '"""',
-    '',
-    'Return the title and body via the emit_backlog_item tool.',
-  ].join('\n')
-  return { system: NEW_BACKLOG_SYSTEM, prompt }
-}
-
-/**
  * Tool Flue uses to pause a draft and ask the author one clarifying question.
  * Paired with {@link NEW_BACKLOG_TOOL} under `tool_choice: "any"` so every
  * turn is one or the other — never free text.
@@ -158,7 +100,7 @@ export const ASK_USER_TOOL: AiTool = {
 
 /**
  * Build the system + first user prompt for Flue's conversational new-backlog
- * flow: the same backlog-stage framing as {@link buildNewBacklogPrompt}, plus
+ * flow: a backlog-stage framing (rough, unscoped — not a finished spec), plus
  * the repo's curated codebase context (so the draft is grounded in what's
  * actually there) and the option to ask a clarifying question via
  * {@link ASK_USER_TOOL} before committing to a draft.
@@ -189,6 +131,81 @@ You have two tools: \`ask_user\` to get a clarifying answer before drafting, and
     '"""',
     '',
     'Call ask_user if something essential is ambiguous, otherwise call emit_backlog_item now.',
+  ]
+    .filter((line) => line !== null)
+    .join('\n\n')
+
+  return { system, prompt }
+}
+
+/**
+ * Tool Flue uses to submit the finished rewritten body for a conversational
+ * plan move. Paired with {@link ASK_USER_TOOL} under `tool_choice: "any"`, the
+ * same shape as the conversational backlog draft.
+ */
+export const PROPOSE_MOVE_TOOL: AiTool = {
+  name: 'propose_move',
+  description:
+    "Submit the plan's rewritten markdown body for its new lifecycle state.",
+  input_schema: {
+    type: 'object',
+    properties: {
+      body: {
+        type: 'string',
+        description:
+          'The full rewritten markdown body — no frontmatter, matching the transition guidance.',
+      },
+    },
+    required: ['body'],
+  },
+}
+
+/**
+ * Build the system + first user prompt for Flue's conversational move: the
+ * per-transition guidance from {@link transitionGuidance}, plus the repo's
+ * curated codebase context and the option to ask a clarifying question via
+ * {@link ASK_USER_TOOL} before committing to a rewrite.
+ */
+export function buildConversationalMovePrompt(opts: {
+  title: string
+  fromState: PlanState
+  toState: PlanState
+  body: string
+  context?: string
+  codebaseContext: { path: string; text: string }[]
+}): { system: string; prompt: string } {
+  const { title, fromState, toState, body, context, codebaseContext } = opts
+  const system = `${MOVE_SYSTEM}
+
+You have two tools: \`ask_user\` to get a clarifying answer before rewriting, and \`propose_move\` to submit the finished body. Every turn, call exactly one of them — never reply in plain text. Ask at most a couple of questions total; once you have enough to write an honest rewrite (open questions in the body are fine for the rest), propose the move.`
+
+  const contextBlock =
+    codebaseContext.length > 0
+      ? [
+          "The repo's codebase context — ground the rewrite in what's actually here (stack, structure, conventions):",
+          ...codebaseContext.map(
+            (f) => `### ${f.path}\n\`\`\`\n${f.text}\n\`\`\``,
+          ),
+        ].join('\n\n')
+      : null
+
+  const prompt = [
+    `Plan title: ${title}`,
+    `Moving from "${planStateDef(fromState).label}" to "${planStateDef(toState).label}".`,
+    '',
+    transitionGuidance(fromState, toState),
+    '',
+    contextBlock,
+    context?.trim()
+      ? `Extra context from the author (weave it in where relevant):\n${context.trim()}`
+      : null,
+    '',
+    'Current plan body:',
+    '"""',
+    body,
+    '"""',
+    '',
+    'Call ask_user if something essential is ambiguous, otherwise call propose_move now with the rewritten body.',
   ]
     .filter((line) => line !== null)
     .join('\n\n')
