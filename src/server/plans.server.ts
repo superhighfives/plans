@@ -23,6 +23,7 @@ import {
 import { createCommit, putFile } from '~/lib/github/write'
 import { diffPlanTrees, type PlanEntry } from '~/lib/plans/diff'
 import {
+  type Frontmatter,
   isValidPlanFrontmatter,
   parseFrontmatter,
   serializeFrontmatter,
@@ -614,15 +615,49 @@ export async function proposePlanMove(
   })
   const newBody = await completeText(env, { system, prompt })
 
+  return buildMovePreview(db, env, ctx, {
+    path,
+    toState,
+    title,
+    source,
+    frontmatter: parsed.data,
+    newBody,
+  })
+}
+
+/**
+ * Package a rewritten body into a full move preview — re-attach frontmatter
+ * with the deterministic lifecycle fields, derive the destination path, diff
+ * against the source, and check whether a different plan already occupies
+ * the destination. Shared by the one-shot draft above and Flue's
+ * conversational move (slice 4); the caller owns getting to `newBody` (a
+ * single AI call there, an `ask_user` loop here).
+ */
+export async function buildMovePreview(
+  db: Db,
+  env: AppEnv,
+  ctx: RepoContext,
+  input: {
+    path: string
+    toState: PlanState
+    title: string
+    source: PlanSource
+    frontmatter: Frontmatter
+    newBody: string
+  },
+): Promise<PlanMovePreview> {
+  const info = parsePlanPath(input.path)
+  if (!info) throw new Error('Not a plan path')
+
   const newContent = serializeFrontmatter(
     {
-      ...parsed.data,
-      status: planStateDef(toState).status,
+      ...input.frontmatter,
+      status: planStateDef(input.toState).status,
       updated: todayIso(),
     },
-    newBody,
+    input.newBody,
   )
-  const newPath = `plans/${toState}/${info.slug}.md`
+  const newPath = `plans/${input.toState}/${info.slug}.md`
 
   // Slugs aren't unique across state directories, so the destination path can
   // already hold a *different* plan. Surface that here so the preview can warn —
@@ -638,16 +673,16 @@ export async function proposePlanMove(
   )
 
   return {
-    title,
+    title: input.title,
     fromState: info.state,
-    toState,
-    oldPath: path,
+    toState: input.toState,
+    oldPath: input.path,
     newPath,
-    oldContent: source.content,
+    oldContent: input.source.content,
     newContent,
-    baseSha: source.sha,
-    diff: unifiedDiff(source.content, newContent),
-    warnings: toState === 'ready' ? findOpenQuestions(newBody) : [],
+    baseSha: input.source.sha,
+    diff: unifiedDiff(input.source.content, newContent),
+    warnings: input.toState === 'ready' ? findOpenQuestions(input.newBody) : [],
     destinationExists: destination !== null,
   }
 }
