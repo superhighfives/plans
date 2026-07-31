@@ -13,7 +13,7 @@ Take the CMS from "works for me" to "safe for other people to use," and get it p
 
 ## Context
 
-Today it's a single user (me). The read/edit/AI features (Phases 0–4, `plans/done/plans-cms.md`) are shipped and working live, and the conversational **Flue agent** (`plans/ready/flue-agent.md`) is the next big feature. Before opening it up, the app needs the things a single-user tool can skip: cost controls on the AI calls, rate limiting, an audit surface, and org/team niceties. **Clerk stays out of scope** — GitHub-App auth is expected to be enough — but the session layer stays thin/swappable in case that changes.
+Today it's a single user (me). The read/edit/AI features (Phases 0–4, `plans/done/plans-cms.md`) and the conversational **Flue agent** (Phase 5, `plans/done/flue-agent.md`) are both shipped and working live. Before opening the app up beyond one user, it needs the things a single-user tool can skip: cost controls on the AI calls, rate limiting, an audit surface, and org/team niceties. **Clerk stays out of scope** — GitHub-App auth is expected to be enough — but the session layer stays thin/swappable in case that changes.
 
 ## Approach
 

@@ -1,11 +1,25 @@
 ---
 title: Flue agent — codebase-aware, conversational plan authoring
-status: In Progress
+status: Complete
 created: 2026-07-28
-updated: 2026-07-28
+updated: 2026-07-31
 ---
 
 # Flue agent — codebase-aware, conversational plan authoring
+
+## Overview
+
+All five planned slices shipped and merged (PRs #13–#17): `FlueAgent`, a per-repo Durable Object, gives the CMS's new-backlog and move flows real codebase context and a conversational `ask_user` loop instead of a blind one-shot completion, and a plan's move to `done` can now be verified by actually running the repo's test/build scripts in an ephemeral Sandbox before committing. Every write still goes through the existing, unchanged `commitPlanMove` / `commitNewBacklog` path — Flue only adds context and conversation *in front of* it.
+
+**What shipped, concretely:**
+- **`FlueAgent`** (Cloudflare Agents SDK, one Durable Object per repo, named `owner~repo`) — auth-gated at the socket (`authorizeAgent` re-checks session → user → repo access; the client-chosen instance name is never the trust boundary).
+- **Codebase context**: on connect, `FlueAgent` fetches the repo's tree, curates a stack/config/docs subset (`selectContextPaths`), and caches the blobs in its own SQLite keyed by tree sha — cache-first, so an unchanged repo skips the GitHub round trips.
+- **Conversational new-backlog and move**: both loop the model between `ask_user` (pauses, asks the author, resumes on their answer) and a finishing tool (`emit_backlog_item` / `propose_move`) via `completeToolTurn` (`tool_choice: "any"` — never plain prose). The finished draft is packaged through a shared helper (`buildBacklogPreview` / `buildMovePreview`) into the *same* preview/commit UI the CMS already had.
+- **Container escalation**: a plan's move to `done` gets an optional `VerifyMoveControl` step — a Cloudflare Workflow (`VerifyPlanMoveWorkflow`) clones the repo's default branch into a Sandbox container, installs dependencies, and runs whichever of `test`/`build` the repo defines, gating "Approve & commit" on a real pass/fail rather than the AI rewrite's prose claims.
+
+**Deviations from the original spec** (see Tasks below for the full list): codebase context is preloaded into the prompt rather than exposed as agent-callable `list_repo_tree`/`read_file` tools; the Q&A pause uses a bespoke WebSocket `ask_user`/`answer` protocol rather than the Agents SDK's `waitForApproval()`; container escalation's trigger (an open question at kickoff) resolved to "verifying a `done` move," not general run-arbitrary-code support.
+
+**Known gaps, tracked rather than blocking:** live end-to-end verification (a real `wrangler dev`/deploy exercising the WebSocket, a real Flue conversation, and a real Sandbox clone+test+build) hasn't been run — everything below is typecheck/test/build-verified only. `FlueAgent` and `VerifyPlanMoveWorkflow` have no direct unit tests (both are stateful — a Durable Object and a Workflow — so coverage today is the pure pieces underneath them: prompt builders, `completeToolTurn`, `parseInstanceName`). `runVerify`'s poll loop has a known, deliberately-deferred race (no generation guard against overlapping runs — cosmetic UI flicker, not a wrong commit gate). See Open Questions for what's next (DO scale, context budget, quotas) — those belong with `plans/backlog/multi-user-and-launch.md`, not this plan.
 
 ## Goal
 
