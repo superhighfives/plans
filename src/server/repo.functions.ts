@@ -1,6 +1,8 @@
 import { notFound } from '@tanstack/react-router'
 import { createServerFn } from '@tanstack/react-start'
+import { eq } from 'drizzle-orm'
 import { getDb } from '~/db'
+import { verifyMoveInstances } from '~/db/schema'
 import { getEnv } from '~/env'
 import { newId } from '~/lib/crypto'
 import { isPlanPath } from '~/lib/plans/states'
@@ -281,6 +283,10 @@ export const startVerifyMove = createServerFn({ method: 'POST' })
         defaultBranch: ctx.repo.defaultBranch,
       },
     })
+    await db.insert(verifyMoveInstances).values({
+      id: instanceId,
+      repoId: ctx.repo.id,
+    })
     return { instanceId }
   })
 
@@ -306,6 +312,11 @@ export const getVerifyMoveStatus = createServerFn({ method: 'GET' })
       data.repo,
     )
     if (!ctx) throw notFound()
+
+    const mapping = await db.query.verifyMoveInstances.findFirst({
+      where: eq(verifyMoveInstances.id, data.instanceId),
+    })
+    if (!mapping || mapping.repoId !== ctx.repo.id) throw notFound()
 
     const env = getEnv()
     const instance = await env.VERIFY_PLAN_MOVE_WORKFLOW.get(data.instanceId)

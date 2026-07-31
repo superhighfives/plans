@@ -141,6 +141,15 @@ export const auditLog = sqliteTable(
   (t) => [index('audit_log_repo_idx').on(t.repoId)],
 )
 
+/** Maps a verify-move Workflow instance back to the repo it was started for — instanceId is client-supplied and global, so `getVerifyMoveStatus` needs this to scope reads to the caller's own repo. */
+export const verifyMoveInstances = sqliteTable('verify_move_instances', {
+  id: text('id').primaryKey(),
+  repoId: text('repo_id')
+    .notNull()
+    .references(() => repos.id, { onDelete: 'cascade' }),
+  createdAt: integer('created_at').notNull().default(now),
+})
+
 export type User = typeof users.$inferSelect
 export type Installation = typeof installations.$inferSelect
 export type Repo = typeof repos.$inferSelect

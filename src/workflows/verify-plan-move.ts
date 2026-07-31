@@ -89,6 +89,7 @@ export class VerifyPlanMoveWorkflow extends WorkflowEntrypoint<
     )
 
     if (!cloned.success) {
+      await this.destroySandbox(step, sandboxId)
       return {
         ok: false,
         ranScripts: [],
@@ -104,81 +105,86 @@ export class VerifyPlanMoveWorkflow extends WorkflowEntrypoint<
       }
     }
 
-    const install = await step.do(
-      'install dependencies',
-      { timeout: '3 minutes' },
-      async () => {
-        const sandbox = getSandbox(this.env.Sandbox, sandboxId)
-        const hasLockfile = await sandbox.exec('test -f package-lock.json', {
-          cwd: WORKSPACE,
-        })
-        const command = hasLockfile.success ? 'npm ci' : 'npm install'
-        const result = await sandbox.exec(command, {
-          cwd: WORKSPACE,
-          timeout: 180_000,
-        })
-        return {
-          name: 'install',
-          command,
-          exitCode: result.exitCode,
-          success: result.success,
-          logTail: tail(result.stdout + result.stderr),
-        } satisfies VerifyStepResult
-      },
-    )
-
-    if (!install.success) {
-      await this.destroySandbox(step, sandboxId)
-      return { ok: false, ranScripts: [], steps: [install] }
-    }
-
-    const availableScripts = await step.do(
-      'read package.json scripts',
-      async () => {
-        const sandbox = getSandbox(this.env.Sandbox, sandboxId)
-        const file = await sandbox.readFile(`${WORKSPACE}/package.json`)
-        const parsed = JSON.parse(file.content) as {
-          scripts?: Record<string, string>
-        }
-        return Object.keys(parsed.scripts ?? {})
-      },
-    )
-
-    const ranScripts = VERIFY_SCRIPTS.filter((name) =>
-      availableScripts.includes(name),
-    )
-    const steps: VerifyStepResult[] = [install]
-    let ok = ranScripts.length > 0
-
-    for (const name of ranScripts) {
-      const result = await step.do(
-        `run npm run ${name}`,
+    // The sandbox is live from this point on — everything below must destroy
+    // it before returning or throwing, or a stuck/thrown step (e.g. malformed
+    // package.json) strands the container until its idle timeout.
+    try {
+      const install = await step.do(
+        'install dependencies',
         { timeout: '3 minutes' },
         async () => {
           const sandbox = getSandbox(this.env.Sandbox, sandboxId)
-          const command = `npm run ${name}`
-          const execResult = await sandbox.exec(command, {
+          const hasLockfile = await sandbox.exec('test -f package-lock.json', {
+            cwd: WORKSPACE,
+          })
+          const command = hasLockfile.success ? 'npm ci' : 'npm install'
+          const result = await sandbox.exec(command, {
             cwd: WORKSPACE,
             timeout: 180_000,
           })
           return {
-            name,
+            name: 'install',
             command,
-            exitCode: execResult.exitCode,
-            success: execResult.success,
-            logTail: tail(execResult.stdout + execResult.stderr),
+            exitCode: result.exitCode,
+            success: result.success,
+            logTail: tail(result.stdout + result.stderr),
           } satisfies VerifyStepResult
         },
       )
-      steps.push(result)
-      if (!result.success) {
-        ok = false
-        break
-      }
-    }
 
-    await this.destroySandbox(step, sandboxId)
-    return { ok, ranScripts, steps }
+      if (!install.success) {
+        return { ok: false, ranScripts: [], steps: [install] }
+      }
+
+      const availableScripts = await step.do(
+        'read package.json scripts',
+        async () => {
+          const sandbox = getSandbox(this.env.Sandbox, sandboxId)
+          const file = await sandbox.readFile(`${WORKSPACE}/package.json`)
+          const parsed = JSON.parse(file.content) as {
+            scripts?: Record<string, string>
+          }
+          return Object.keys(parsed.scripts ?? {})
+        },
+      )
+
+      const ranScripts = VERIFY_SCRIPTS.filter((name) =>
+        availableScripts.includes(name),
+      )
+      const steps: VerifyStepResult[] = [install]
+      let ok = ranScripts.length > 0
+
+      for (const name of ranScripts) {
+        const result = await step.do(
+          `run npm run ${name}`,
+          { timeout: '3 minutes' },
+          async () => {
+            const sandbox = getSandbox(this.env.Sandbox, sandboxId)
+            const command = `npm run ${name}`
+            const execResult = await sandbox.exec(command, {
+              cwd: WORKSPACE,
+              timeout: 180_000,
+            })
+            return {
+              name,
+              command,
+              exitCode: execResult.exitCode,
+              success: execResult.success,
+              logTail: tail(execResult.stdout + execResult.stderr),
+            } satisfies VerifyStepResult
+          },
+        )
+        steps.push(result)
+        if (!result.success) {
+          ok = false
+          break
+        }
+      }
+
+      return { ok, ranScripts, steps }
+    } finally {
+      await this.destroySandbox(step, sandboxId)
+    }
   }
 
   /** Free the container immediately rather than waiting out its idle timeout — a checkpointed step, so a retry after this point doesn't skip it. */
