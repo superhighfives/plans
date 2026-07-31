@@ -47,42 +47,6 @@ If the plan's original tasks are now complete, mark them done.`
   }
 }
 
-/**
- * Build the prompt to rewrite a plan's body for a state transition. The server
- * re-attaches and normalizes frontmatter (status + updated) afterward, so the
- * model only ever touches the body.
- */
-export function buildMovePrompt(opts: {
-  title: string
-  fromState: PlanState
-  toState: PlanState
-  body: string
-  /** Optional extra context the user typed alongside the move. */
-  context?: string
-}): { system: string; prompt: string } {
-  const { title, fromState, toState, body, context } = opts
-  const prompt = [
-    `Plan title: ${title}`,
-    `Moving from "${planStateDef(fromState).label}" to "${planStateDef(toState).label}".`,
-    '',
-    transitionGuidance(fromState, toState),
-    '',
-    context?.trim()
-      ? `Extra context from the author (weave it in where relevant):\n${context.trim()}`
-      : null,
-    '',
-    'Current plan body:',
-    '"""',
-    body,
-    '"""',
-    '',
-    'Return the rewritten body only.',
-  ]
-    .filter((line) => line !== null)
-    .join('\n')
-  return { system: MOVE_SYSTEM, prompt }
-}
-
 const NEW_BACKLOG_SYSTEM = `You are a meticulous engineering planner helping seed a repository's backlog.
 
 You turn a rough idea into a BACKLOG-stage plan — an early, unscoped note, NOT a finished spec. Fleshing it into a full spec happens later, when it's promoted to "ready". Rules:
@@ -114,28 +78,6 @@ export const NEW_BACKLOG_TOOL: AiTool = {
 }
 
 /**
- * Build the prompt to draft a new backlog item from a rough idea. The model
- * answers via {@link NEW_BACKLOG_TOOL}; the server slugifies the returned title
- * and attaches frontmatter (status: Backlog, created/updated: today).
- */
-export function buildNewBacklogPrompt(opts: { idea: string }): {
-  system: string
-  prompt: string
-} {
-  const prompt = [
-    'Turn this rough idea into a backlog-stage plan.',
-    '',
-    'Rough idea from the author:',
-    '"""',
-    opts.idea.trim(),
-    '"""',
-    '',
-    'Return the title and body via the emit_backlog_item tool.',
-  ].join('\n')
-  return { system: NEW_BACKLOG_SYSTEM, prompt }
-}
-
-/**
  * Tool Flue uses to pause a draft and ask the author one clarifying question.
  * Paired with {@link NEW_BACKLOG_TOOL} under `tool_choice: "any"` so every
  * turn is one or the other — never free text.
@@ -158,7 +100,7 @@ export const ASK_USER_TOOL: AiTool = {
 
 /**
  * Build the system + first user prompt for Flue's conversational new-backlog
- * flow: the same backlog-stage framing as {@link buildNewBacklogPrompt}, plus
+ * flow: a backlog-stage framing (rough, unscoped — not a finished spec), plus
  * the repo's curated codebase context (so the draft is grounded in what's
  * actually there) and the option to ask a clarifying question via
  * {@link ASK_USER_TOOL} before committing to a draft.
@@ -220,8 +162,8 @@ export const PROPOSE_MOVE_TOOL: AiTool = {
 
 /**
  * Build the system + first user prompt for Flue's conversational move: the
- * same transition framing as {@link buildMovePrompt}, plus the repo's curated
- * codebase context and the option to ask a clarifying question via
+ * per-transition guidance from {@link transitionGuidance}, plus the repo's
+ * curated codebase context and the option to ask a clarifying question via
  * {@link ASK_USER_TOOL} before committing to a rewrite.
  */
 export function buildConversationalMovePrompt(opts: {

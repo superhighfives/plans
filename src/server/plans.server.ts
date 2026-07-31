@@ -3,13 +3,7 @@ import type { Db } from '~/db'
 import type { Installation, PlanCacheRow, Repo } from '~/db/schema'
 import { auditLog, installations, planCache, repos } from '~/db/schema'
 import type { AppEnv } from '~/env'
-import { completeStructured, completeText } from '~/lib/ai/gateway'
-import {
-  buildMovePrompt,
-  buildNewBacklogPrompt,
-  findOpenQuestions,
-  NEW_BACKLOG_TOOL,
-} from '~/lib/ai/plan-prompts'
+import { findOpenQuestions } from '~/lib/ai/plan-prompts'
 import { newId } from '~/lib/crypto'
 import { getInstallationToken } from '~/lib/github/app'
 import { GitHubError } from '~/lib/github/client'
@@ -583,55 +577,11 @@ function todayIso(): string {
 }
 
 /**
- * Draft a plan's move to a new state with Claude (via AI Gateway) and return a
- * preview — nothing is committed here. The model rewrites only the body; we
- * re-attach the frontmatter with the new `status` and today's `updated` so the
- * lifecycle fields are set deterministically rather than by the model.
- */
-export async function proposePlanMove(
-  db: Db,
-  env: AppEnv,
-  ctx: RepoContext,
-  path: string,
-  toState: PlanState,
-  context: string | undefined,
-): Promise<PlanMovePreview> {
-  const info = parsePlanPath(path)
-  if (!info) throw new Error('Not a plan path')
-  if (info.state === toState) throw new Error('Plan is already in that state')
-
-  const source = await loadPlanSource(db, env, ctx, path)
-  if (!source) throw new Error('Plan not found')
-
-  const parsed = parseFrontmatter(source.content)
-  const title = parsed.data.title ?? info.slug
-
-  const { system, prompt } = buildMovePrompt({
-    title,
-    fromState: info.state,
-    toState,
-    body: parsed.content,
-    context,
-  })
-  const newBody = await completeText(env, { system, prompt })
-
-  return buildMovePreview(db, env, ctx, {
-    path,
-    toState,
-    title,
-    source,
-    frontmatter: parsed.data,
-    newBody,
-  })
-}
-
-/**
  * Package a rewritten body into a full move preview — re-attach frontmatter
  * with the deterministic lifecycle fields, derive the destination path, diff
  * against the source, and check whether a different plan already occupies
- * the destination. Shared by the one-shot draft above and Flue's
- * conversational move (slice 4); the caller owns getting to `newBody` (a
- * single AI call there, an `ask_user` loop here).
+ * the destination. Used by Flue's conversational move (slice 4), which owns
+ * getting to `newBody` via its `ask_user` loop.
  */
 export async function buildMovePreview(
   db: Db,
@@ -781,36 +731,11 @@ export async function commitPlanMove(
 }
 
 /**
- * Draft a new backlog item from a rough idea with Claude (via AI Gateway) and
- * return a preview — nothing is committed here. The model proposes a title and a
- * rough body; the server derives a collision-free kebab-case filename and
- * attaches the frontmatter (status: Backlog, created/updated: today) so the
- * lifecycle fields are set deterministically rather than by the model.
- */
-export async function proposeNewBacklog(
-  db: Db,
-  env: AppEnv,
-  ctx: RepoContext,
-  idea: string,
-): Promise<NewBacklogPreview> {
-  const { repo, installation } = ctx
-  const token = await getInstallationToken(db, env, installation)
-
-  const { system, prompt } = buildNewBacklogPrompt({ idea })
-  const draft = await completeStructured<{ title: string; body: string }>(env, {
-    system,
-    prompt,
-    tool: NEW_BACKLOG_TOOL,
-  })
-  return buildBacklogPreview(token, repo, draft)
-}
-
-/**
  * Derive a collision-free filename and serialized frontmatter for a drafted
  * {title, body} and package it as a preview — the part of backlog-drafting
- * that isn't the AI call itself. Shared by the one-shot draft above and
- * Flue's conversational draft (`FlueAgent`, slice 3), so path/slug rules and
- * the deterministic lifecycle fields live in exactly one place.
+ * that isn't the AI call itself. Used by Flue's conversational draft
+ * (`FlueAgent`, slice 3), which owns getting to `{title, body}` via its
+ * `ask_user` loop.
  */
 export async function buildBacklogPreview(
   token: string,

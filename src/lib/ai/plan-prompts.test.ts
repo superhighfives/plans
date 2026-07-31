@@ -3,8 +3,6 @@ import {
   ASK_USER_TOOL,
   buildConversationalBacklogPrompt,
   buildConversationalMovePrompt,
-  buildMovePrompt,
-  buildNewBacklogPrompt,
   findOpenQuestions,
   NEW_BACKLOG_TOOL,
   PROPOSE_MOVE_TOOL,
@@ -35,35 +33,6 @@ describe('findOpenQuestions', () => {
     // The heading names a section; only real items under it should count.
     const body = ['## Open questions', '', 'None — all resolved.'].join('\n')
     expect(findOpenQuestions(body)).toEqual([])
-  })
-})
-
-describe('buildMovePrompt', () => {
-  it('embeds the body, transition, and optional context', () => {
-    const { system, prompt } = buildMovePrompt({
-      title: 'My Plan',
-      fromState: 'backlog',
-      toState: 'ready',
-      body: 'A rough idea about caching.',
-      context: 'Use D1 for storage.',
-    })
-    expect(system).toContain('ONLY the new markdown body')
-    expect(prompt).toContain('My Plan')
-    expect(prompt).toContain('A rough idea about caching.')
-    expect(prompt).toContain('Use D1 for storage.')
-    // backlog → ready promotes into a full spec.
-    expect(prompt).toContain('## Tasks')
-  })
-
-  it('omits the context section when none is given', () => {
-    const { prompt } = buildMovePrompt({
-      title: 'P',
-      fromState: 'in-progress',
-      toState: 'done',
-      body: 'body',
-    })
-    expect(prompt).not.toContain('Extra context from the author')
-    expect(prompt).toContain('What was built')
   })
 })
 
@@ -109,20 +78,7 @@ describe('buildConversationalMovePrompt', () => {
   })
 })
 
-describe('buildNewBacklogPrompt', () => {
-  it('embeds the idea and keeps it a backlog-stage draft', () => {
-    const { system, prompt } = buildNewBacklogPrompt({
-      idea: '  A way to bulk-archive old plans.  ',
-    })
-    // Backlog stage is rough, not a full spec.
-    expect(system).toContain('BACKLOG-stage')
-    expect(system).toContain('NOT a finished spec')
-    expect(system).toContain('Open questions')
-    // The idea is embedded, trimmed.
-    expect(prompt).toContain('A way to bulk-archive old plans.')
-    expect(prompt).toContain('emit_backlog_item')
-  })
-
+describe('NEW_BACKLOG_TOOL', () => {
   it('exposes a tool schema requiring title and body', () => {
     expect(NEW_BACKLOG_TOOL.name).toBe('emit_backlog_item')
     expect(NEW_BACKLOG_TOOL.input_schema.required).toEqual(['title', 'body'])

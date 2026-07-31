@@ -70,9 +70,11 @@ type DraftState =
  * answers each turn via either `ask_user` (paused, forwarded to the client,
  * resumed by an `answer` message) or its finishing tool (`emit_backlog_item` /
  * `propose_move`), grounded in the cached codebase context. Each finished
- * draft is packaged the same way its one-shot predecessor
- * (`proposeNewBacklog` / `proposePlanMove`) is, so the existing preview/commit
- * UI and `commitBacklogItem` / `commitPlanMove` need no changes.
+ * draft is packaged via a shared helper (`buildBacklogPreview` /
+ * `buildMovePreview`) so the existing preview/commit UI and
+ * `commitBacklogItem` / `commitPlanMove` need no changes. (The one-shot
+ * `proposeNewBacklog` / `proposePlanMove` predecessors these draw from were
+ * removed once slice 4 shipped — nothing called them anymore.)
  */
 export class FlueAgent extends Agent {
   async onMessage(connection: Connection, message: WSMessage) {
