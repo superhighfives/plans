@@ -85,7 +85,7 @@ export const NEW_BACKLOG_TOOL: AiTool = {
 export const ASK_USER_TOOL: AiTool = {
   name: 'ask_user',
   description:
-    'Ask the author ONE clarifying question before drafting further. Use only when a genuinely ambiguous decision would change the plan — prefer drafting with an "Open questions" entry over asking anything you could reasonably infer or leave open.',
+    'Ask the author ONE clarifying question before drafting further. When in doubt, ask — err on the side of checking with the author rather than guessing or quietly leaving it as an "Open questions" note.',
   input_schema: {
     type: 'object',
     properties: {
@@ -111,7 +111,7 @@ export function buildConversationalBacklogPrompt(opts: {
 }): { system: string; prompt: string } {
   const system = `${NEW_BACKLOG_SYSTEM}
 
-You have two tools: \`ask_user\` to get a clarifying answer before drafting, and \`emit_backlog_item\` to submit the finished draft. Every turn, call exactly one of them — never reply in plain text. Ask at most a couple of questions total; once you have enough to write an honest, rough backlog entry (open questions in the body are fine for the rest), emit the draft.`
+You have two tools: \`ask_user\` to get a clarifying answer before drafting, and \`emit_backlog_item\` to submit the finished draft. Every turn, call exactly one of them — never reply in plain text. Ask whenever there's real ambiguity — better to check with the author than to guess; only emit the draft once you're confident you have what you need.`
 
   const contextBlock =
     opts.context.length > 0
@@ -130,7 +130,7 @@ You have two tools: \`ask_user\` to get a clarifying answer before drafting, and
     opts.idea.trim(),
     '"""',
     '',
-    'Call ask_user if something essential is ambiguous, otherwise call emit_backlog_item now.',
+    'Call ask_user if anything is ambiguous or worth confirming, otherwise call emit_backlog_item now.',
   ]
     .filter((line) => line !== null)
     .join('\n\n')
@@ -177,7 +177,7 @@ export function buildConversationalMovePrompt(opts: {
   const { title, fromState, toState, body, context, codebaseContext } = opts
   const system = `${MOVE_SYSTEM}
 
-You have two tools: \`ask_user\` to get a clarifying answer before rewriting, and \`propose_move\` to submit the finished body. Every turn, call exactly one of them — never reply in plain text. Ask at most a couple of questions total; once you have enough to write an honest rewrite (open questions in the body are fine for the rest), propose the move.`
+You have two tools: \`ask_user\` to get a clarifying answer before rewriting, and \`propose_move\` to submit the finished body. Every turn, call exactly one of them — never reply in plain text. Ask whenever there's real ambiguity — better to check with the author than to guess; only propose the move once you're confident you have what you need.`
 
   const contextBlock =
     codebaseContext.length > 0
@@ -205,7 +205,7 @@ You have two tools: \`ask_user\` to get a clarifying answer before rewriting, an
     body,
     '"""',
     '',
-    'Call ask_user if something essential is ambiguous, otherwise call propose_move now with the rewritten body.',
+    'Call ask_user if anything is ambiguous or worth confirming, otherwise call propose_move now with the rewritten body.',
   ]
     .filter((line) => line !== null)
     .join('\n\n')
