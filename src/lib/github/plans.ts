@@ -49,7 +49,7 @@ interface PullResponse {
   updated_at: string
   user: { login: string } | null
   head: { ref: string; sha: string }
-  base: { ref: string }
+  base: { ref: string; sha: string }
 }
 
 /** An open pull request, trimmed to what the board needs. */
@@ -63,6 +63,13 @@ export interface OpenPullRequest {
   headSha: string
   /** Branch the PR targets (usually the default branch). */
   baseRef: string
+  /**
+   * Base commit sha — where the PR actually forked from, as opposed to the
+   * default branch's current tip. Diffing against this (rather than the live
+   * tip) keeps stale branches (e.g. old dependabot PRs) from showing plans
+   * that moved on the default branch *after* the PR forked as false changes.
+   */
+  baseSha: string
   draft: boolean
   /** github.com PR URL. */
   url: string
@@ -91,6 +98,7 @@ export async function listOpenPullRequests(
     headRef: p.head.ref,
     headSha: p.head.sha,
     baseRef: p.base.ref,
+    baseSha: p.base.sha,
     draft: Boolean(p.draft),
     url: p.html_url,
     updatedAt: p.updated_at,

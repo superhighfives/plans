@@ -275,7 +275,6 @@ export async function loadRepoPlans(
     token,
     repo.owner,
     repo.name,
-    tree.entries,
   )
 
   return {
@@ -288,9 +287,13 @@ export async function loadRepoPlans(
 }
 
 /**
- * Diff each open PR's plan tree against the default branch to find plans that
- * are added / moved between states / modified / removed on a branch. Best-effort:
- * a missing `pull_requests: read` scope (403) degrades to a "no-access" status
+ * Diff each open PR's plan tree against the commit it actually forked from (not
+ * the default branch's current tip) to find plans that are added / moved
+ * between states / modified / removed on a branch. Diffing against the live
+ * tip would misreport stale branches (e.g. an old dependabot PR opened before
+ * other plans moved states): everything the default branch did since the PR
+ * forked would show up as a change the PR itself never made. Best-effort: a
+ * missing `pull_requests: read` scope (403) degrades to a "no-access" status
  * so the board can prompt for it; any other error just yields empty activity so
  * the board never fails to render. Per-PR tree fetches run in parallel and a
  * single failing PR (e.g. a fork we can't read) is skipped, not fatal.
@@ -299,7 +302,6 @@ async function loadBranchActivity(
   token: string,
   owner: string,
   repo: string,
-  baseEntries: PlanEntry[],
 ): Promise<{ activity: PullRequestActivity[]; status: BranchActivityStatus }> {
   let pulls: Awaited<ReturnType<typeof listOpenPullRequests>>
   try {
@@ -313,10 +315,25 @@ async function loadBranchActivity(
     return { activity: [], status: 'ok' }
   }
 
+  // Multiple open PRs (e.g. a batch of dependabot bumps) often share the same
+  // fork point — fetch each distinct base sha's plan tree once.
+  const baseTreeCache = new Map<string, Promise<PlanEntry[]>>()
+  function baseEntriesAt(sha: string): Promise<PlanEntry[]> {
+    let entries = baseTreeCache.get(sha)
+    if (!entries) {
+      entries = listPlanTree(token, owner, repo, sha).then((t) => t.entries)
+      baseTreeCache.set(sha, entries)
+    }
+    return entries
+  }
+
   const activity = await Promise.all(
     pulls.map(async (pr): Promise<PullRequestActivity | null> => {
       try {
-        const headTree = await listPlanTree(token, owner, repo, pr.headSha)
+        const [baseEntries, headTree] = await Promise.all([
+          baseEntriesAt(pr.baseSha),
+          listPlanTree(token, owner, repo, pr.headSha),
+        ])
         const changes = diffPlanTrees(baseEntries, headTree.entries)
         if (changes.length === 0) return null
         return {
@@ -929,21 +946,29 @@ export async function loadPlanView(
     await Promise.all(
       pulls.map(async (pr): Promise<PlanBranchCandidate | null> => {
         try {
-          const headTree = await listPlanTree(
-            token,
-            repo.owner,
-            repo.name,
-            pr.headSha,
-          )
+          const [baseTree, headTree] = await Promise.all([
+            listPlanTree(token, repo.owner, repo.name, pr.baseSha),
+            listPlanTree(token, repo.owner, repo.name, pr.headSha),
+          ])
           const entry = headTree.entries.find(
             (e) => parsePlanPath(e.path)?.slug === info.slug,
           )
           if (!entry) return null // added-only or removed on this branch
           const headInfo = parsePlanPath(entry.path)
           if (!headInfo) return null
-          if (headInfo.state !== base.state)
+          // Compare against the plan's state at the PR's fork point, not the
+          // default branch's current tip — a stale branch (e.g. an old
+          // dependabot PR) otherwise reads as "moved" purely because the plan
+          // moved on the default branch *after* the PR forked.
+          const forkEntry = baseTree.entries.find(
+            (e) => parsePlanPath(e.path)?.slug === info.slug,
+          )
+          const forkInfo = forkEntry ? parsePlanPath(forkEntry.path) : null
+          const priorState = forkInfo?.state ?? base.state
+          const priorSha = forkEntry?.sha ?? base.bodySha
+          if (headInfo.state !== priorState)
             return { pr, headPath: entry.path, changeKind: 'moved' }
-          if (entry.sha !== base.bodySha)
+          if (entry.sha !== priorSha)
             return { pr, headPath: entry.path, changeKind: 'modified' }
           return null // identical on this branch
         } catch {
