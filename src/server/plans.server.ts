@@ -3,7 +3,6 @@ import type { Db } from '~/db'
 import type { Installation, PlanCacheRow, Repo } from '~/db/schema'
 import { auditLog, installations, planCache, repos } from '~/db/schema'
 import type { AppEnv } from '~/env'
-import { findOpenQuestions } from '~/lib/ai/plan-prompts'
 import { newId } from '~/lib/crypto'
 import { getInstallationToken } from '~/lib/github/app'
 import { GitHubError } from '~/lib/github/client'
@@ -22,6 +21,7 @@ import {
   parseFrontmatter,
   serializeFrontmatter,
 } from '~/lib/plans/frontmatter'
+import { findOpenQuestions } from '~/lib/plans/open-questions'
 import { slugify, uniqueSlug } from '~/lib/plans/slug'
 import {
   PLAN_STATES,
@@ -89,28 +89,6 @@ export async function resolveAccessibleRepo(
   })
   if (!installation) return null
 
-  return { repo, installation }
-}
-
-/**
- * Resolve a repo + its installation by owner/name WITHOUT a user scope. For use
- * inside the Flue Durable Object, which is only reachable after the socket gate
- * (`authorizeAgent`) has already verified the connecting user's access — so the
- * DO needs the installation (to mint a token) but not a second user check.
- */
-export async function findRepoContext(
-  db: Db,
-  owner: string,
-  name: string,
-): Promise<RepoContext | null> {
-  const repo = await db.query.repos.findFirst({
-    where: and(eq(repos.owner, owner), eq(repos.name, name)),
-  })
-  if (!repo) return null
-  const installation = await db.query.installations.findFirst({
-    where: eq(installations.id, repo.installationId),
-  })
-  if (!installation) return null
   return { repo, installation }
 }
 
@@ -594,11 +572,39 @@ function todayIso(): string {
 }
 
 /**
+ * Preview a manual move: load the plan's current source, and package the
+ * author's own edited body (or the body unchanged, if they didn't touch it)
+ * into a full move preview via {@link buildMovePreview}.
+ */
+export async function previewPlanMove(
+  db: Db,
+  env: AppEnv,
+  ctx: RepoContext,
+  input: { path: string; toState: PlanState; newBody: string },
+): Promise<PlanMovePreview | null> {
+  const source = await loadPlanSource(db, env, ctx, input.path)
+  if (!source) return null
+
+  const parsed = parseFrontmatter(source.content)
+  const info = parsePlanPath(input.path)
+  if (!info) return null
+  const title = parsed.data.title ?? info.slug
+
+  return buildMovePreview(db, env, ctx, {
+    path: input.path,
+    toState: input.toState,
+    title,
+    source,
+    frontmatter: parsed.data,
+    newBody: input.newBody,
+  })
+}
+
+/**
  * Package a rewritten body into a full move preview — re-attach frontmatter
  * with the deterministic lifecycle fields, derive the destination path, diff
  * against the source, and check whether a different plan already occupies
- * the destination. Used by Flue's conversational move (slice 4), which owns
- * getting to `newBody` via its `ask_user` loop.
+ * the destination.
  */
 export async function buildMovePreview(
   db: Db,
@@ -748,11 +754,22 @@ export async function commitPlanMove(
 }
 
 /**
+ * Preview a manually-typed new backlog item: fetch the installation token and
+ * package the author's own {title, body} via {@link buildBacklogPreview}.
+ */
+export async function previewNewBacklogItem(
+  db: Db,
+  env: AppEnv,
+  ctx: RepoContext,
+  draft: { title: string; body: string },
+): Promise<NewBacklogPreview> {
+  const token = await getInstallationToken(db, env, ctx.installation)
+  return buildBacklogPreview(token, ctx.repo, draft)
+}
+
+/**
  * Derive a collision-free filename and serialized frontmatter for a drafted
- * {title, body} and package it as a preview — the part of backlog-drafting
- * that isn't the AI call itself. Used by Flue's conversational draft
- * (`FlueAgent`, slice 3), which owns getting to `{title, body}` via its
- * `ask_user` loop.
+ * {title, body} and package it as a preview.
  */
 export async function buildBacklogPreview(
   token: string,

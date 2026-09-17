@@ -11,12 +11,11 @@ the two share one source of truth for the lifecycle. See
 [The `plans` skill](#the-plans-skill) below.
 
 This repo currently implements **Phase 0 (foundations)**, **Phase 1 (the
-read-only reader)**, **Phase 2 (hand editing)**, and **Phase 3 (AI-assisted
-moves)** — plans can be edited and committed back as bot-authored commits, and
-moved between lifecycle states with Claude (via Cloudflare AI Gateway) drafting
-the rewrite, shown as a diff to approve before an atomic move-and-update commit.
-AI-drafted new backlog items and Flue chat are later phases — see the
-[plan](plans/ready/plans-cms.md).
+read-only reader)**, and **Phase 2 (hand editing)** — plans can be edited and
+committed back as bot-authored commits, and moved between lifecycle states
+by hand-editing the body for its new state, shown as a diff to approve before
+an atomic move-and-update commit. A new backlog item is written the same
+way — title + body, previewed, then committed.
 
 ## What works today
 
@@ -28,6 +27,9 @@ AI-drafted new backlog items and Flue chat are later phases — see the
 - **Dashboard** — installations, and under each, the repos that have plans.
 - **Repo view** — the four states as lists, populated from the plans.
 - **Plan view** — rendered markdown body + parsed frontmatter (title, status, dates).
+- **Hand-editing** — edit a plan's raw markdown in place and commit it, or move
+  it to another lifecycle state (edit the body, preview the diff, commit), or
+  write a new backlog item (title + body, previewed before committing).
 - **Freshness** — incremental cache keyed by git blob sha, a manual "Rescan"/
   "Refresh", and `push` / `installation` webhook handling.
 - **One-command bootstrap** — `curl -fsSL plans.superhighfives.com/start | sh`

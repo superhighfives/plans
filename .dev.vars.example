@@ -24,11 +24,3 @@ TOKEN_ENCRYPTION_KEY="base64-32-byte-key"
 # The public origin of the deployment (no trailing slash). Used to build the
 # OAuth redirect URI and to validate webhook/CSRF origins.
 APP_URL="http://localhost:5173"
-
-# --- AI (Cloudflare AI Gateway → Claude) ---
-# AI features (Phase 3+) run Claude through the Workers AI binding (`ai` in
-# wrangler.jsonc), routed via a Cloudflare AI Gateway. Auth and billing ride on
-# your Cloudflare account (Unified Billing — load credits into the account), so
-# no gateway token or Anthropic key lives here — just the gateway slug.
-# Gateway slug (Dashboard → AI → AI Gateway).
-CF_AI_GATEWAY_ID="your-gateway-slug"

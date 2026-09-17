@@ -5,9 +5,11 @@ import { getDb } from '~/db'
 import { verifyMoveInstances } from '~/db/schema'
 import { getEnv } from '~/env'
 import { newId } from '~/lib/crypto'
-import { isPlanPath } from '~/lib/plans/states'
+import { isPlanPath, PLAN_STATES, type PlanState } from '~/lib/plans/states'
 import type {
+  NewBacklogPreview,
   PlanDetail,
+  PlanMovePreview,
   PlanView,
   RepoPlans,
   VerifyMoveStatus,
@@ -24,6 +26,8 @@ import {
   loadRepoPlans,
   type MovePlanResult,
   type PlanSource,
+  previewNewBacklogItem,
+  previewPlanMove,
   resolveAccessibleRepo,
   type WritePlanResult,
   writePlan,
@@ -57,11 +61,22 @@ interface CommitMoveInput extends RepoInput {
   baseSha: string
 }
 
+interface PreviewMoveInput extends PlanInput {
+  toState: PlanState
+  /** The author's own rewritten body for the new state. */
+  newBody: string
+}
+
 interface CommitBacklogInput extends RepoInput {
   /** Destination path (plans/backlog/<slug>.md) from the preview. */
   path: string
   /** Full proposed file (frontmatter + body) to commit. */
   newContent: string
+}
+
+interface PreviewBacklogInput extends RepoInput {
+  title: string
+  body: string
 }
 
 function validateRepoInput(data: RepoInput): RepoInput {
@@ -216,6 +231,44 @@ export const updatePlan = createServerFn({ method: 'POST' })
     )
   })
 
+/**
+ * Preview a manual move: the author picks a target state and edits the body
+ * themselves; this packages it into a diff-able preview. Enforces per-user
+ * repo access.
+ */
+export const previewMove = createServerFn({ method: 'POST' })
+  .middleware([authMiddleware])
+  .validator((data: PreviewMoveInput): PreviewMoveInput => {
+    const base = validateRepoInput(data)
+    if (!data?.path || !isPlanPath(data.path)) throw notFound()
+    if (!data?.toState || !PLAN_STATES.includes(data.toState))
+      throw new Error('toState is required')
+    if (typeof data.newBody !== 'string') throw new Error('newBody is required')
+    return {
+      ...base,
+      path: data.path,
+      toState: data.toState,
+      newBody: data.newBody,
+    }
+  })
+  .handler(async ({ context, data }): Promise<PlanMovePreview> => {
+    const db = getDb()
+    const ctx = await resolveAccessibleRepo(
+      db,
+      context.user.id,
+      data.owner,
+      data.repo,
+    )
+    if (!ctx) throw notFound()
+    const preview = await previewPlanMove(db, getEnv(), ctx, {
+      path: data.path,
+      toState: data.toState,
+      newBody: data.newBody,
+    })
+    if (!preview) throw notFound()
+    return preview
+  })
+
 /** Commit an approved move as one atomic commit. Enforces per-user repo access. */
 export const commitMove = createServerFn({ method: 'POST' })
   .middleware([authMiddleware])
@@ -335,6 +388,35 @@ export const getVerifyMoveStatus = createServerFn({ method: 'GET' })
       }
     }
     return { status: 'running' }
+  })
+
+/**
+ * Preview a manually-typed new backlog item: derives a collision-free
+ * filename and serialized frontmatter from the author's own {title, body}.
+ * Enforces per-user repo access.
+ */
+export const previewBacklog = createServerFn({ method: 'POST' })
+  .middleware([authMiddleware])
+  .validator((data: PreviewBacklogInput): PreviewBacklogInput => {
+    const base = validateRepoInput(data)
+    if (typeof data.title !== 'string' || data.title.trim().length === 0)
+      throw new Error('title is required')
+    if (typeof data.body !== 'string') throw new Error('body is required')
+    return { ...base, title: data.title, body: data.body }
+  })
+  .handler(async ({ context, data }): Promise<NewBacklogPreview> => {
+    const db = getDb()
+    const ctx = await resolveAccessibleRepo(
+      db,
+      context.user.id,
+      data.owner,
+      data.repo,
+    )
+    if (!ctx) throw notFound()
+    return previewNewBacklogItem(db, getEnv(), ctx, {
+      title: data.title,
+      body: data.body,
+    })
   })
 
 /** Commit an approved new backlog item. Enforces per-user repo access. */
