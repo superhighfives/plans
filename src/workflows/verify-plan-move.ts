@@ -13,8 +13,7 @@ import type { VerifyPlanMoveResult, VerifyStepResult } from '~/lib/plans/types'
  * What `VerifyPlanMoveWorkflow` needs to clone and verify a repo. Deliberately
  * NOT the installation token itself — Workflow params are checkpointed
  * (persisted) for the run's lifetime, so this mints a fresh token from the DB
- * inside the workflow instead, the same "don't persist the raw token"
- * discipline `FlueAgent`'s draft state already follows (slice 3 review fix).
+ * inside the workflow instead of persisting the raw token.
  */
 export interface VerifyPlanMovePayload {
   /** `installations.id` (DB primary key) — used to look up + mint a token. */

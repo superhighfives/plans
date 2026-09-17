@@ -1,7 +1,6 @@
 import { createFileRoute, Link, useRouter } from '@tanstack/react-router'
 import { useServerFn } from '@tanstack/react-start'
-import { useAgent } from 'agents/react'
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import type { PlanChange } from '~/lib/plans/diff'
@@ -19,6 +18,7 @@ import type {
 import {
   commitBacklogItem,
   getRepoPlans,
+  previewBacklog,
   refreshRepoPlans,
 } from '~/server/repo.functions'
 
@@ -200,29 +200,10 @@ function RepoPage() {
   )
 }
 
-/** A message Flue can send back over the draft conversation's WebSocket. */
-interface FlueMessage {
-  type?: string
-  files?: string[]
-  cached?: boolean
-  truncated?: boolean
-  question?: string
-  error?: string
-  title?: string
-  slug?: string
-  path?: string
-  newContent?: string
-  body?: string
-}
-
 /**
- * Draft a new backlog item conversationally with Flue. The user types a rough
- * idea; Flue (grounded in the repo's cached codebase context) either asks a
- * clarifying question — answered inline, looping until it has enough — or
- * proposes a title + body straight away. The rendered plan is then shown for
- * approval before anything is committed into plans/backlog/ (mirrors the
- * Phase 3 move preview path; committing still goes through the existing
- * `commitBacklogItem` path, unchanged).
+ * Hand-write a new backlog item: the author types a title and a rough
+ * markdown body themselves, previews the file it'll become, then commits it
+ * into plans/backlog/.
  */
 function NewBacklogItem({
   owner,
@@ -234,93 +215,26 @@ function NewBacklogItem({
   onClose: () => void
 }) {
   const router = useRouter()
-  const [idea, setIdea] = useState('')
-  const [flueStatus, setFlueStatus] = useState<string | null>(null)
+  const [title, setTitle] = useState('')
+  const [body, setBody] = useState('')
   const [drafting, setDrafting] = useState(false)
-  const [question, setQuestion] = useState<string | null>(null)
-  const [answer, setAnswer] = useState('')
   const [preview, setPreview] = useState<NewBacklogPreview | null>(null)
   const [committing, setCommitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
-  const flue = useAgent({
-    agent: 'flue-agent',
-    name: `${owner}~${repo}`,
-    onMessage: (e) => {
-      let msg: FlueMessage
-      try {
-        msg = JSON.parse(typeof e.data === 'string' ? e.data : '{}')
-      } catch {
-        setDrafting(false)
-        setError('Flue sent something unreadable — try again.')
-        return
-      }
-      if (msg.type === 'context') {
-        setFlueStatus(
-          `read ${msg.files?.length ?? 0} context files${msg.cached ? ' (cached)' : ''}`,
-        )
-      } else if (msg.type === 'question' && msg.question) {
-        setDrafting(false)
-        setQuestion(msg.question)
-      } else if (msg.type === 'preview') {
-        setDrafting(false)
-        setQuestion(null)
-        setPreview({
-          title: msg.title ?? '',
-          slug: msg.slug ?? '',
-          path: msg.path ?? '',
-          newContent: msg.newContent ?? '',
-          body: msg.body ?? '',
-        })
-      } else if (msg.type === 'error') {
-        setDrafting(false)
-        setError("Flue couldn't draft the item — try again.")
-      }
-    },
-    onError: () => {
-      setDrafting(false)
-      setError('Lost connection to Flue — try again.')
-    },
-  })
-
-  useEffect(() => {
-    let cancelled = false
-    flue.ready
-      .then(() => {
-        if (!cancelled) flue.send(JSON.stringify({ type: 'context' }))
-      })
-      .catch(() => {})
-    return () => {
-      cancelled = true
-    }
-  }, [flue])
-
   async function draft() {
-    if (idea.trim().length === 0) return
-    setDrafting(true)
-    setError(null)
-    setPreview(null)
-    setQuestion(null)
-    try {
-      await flue.ready
-      flue.send(JSON.stringify({ type: 'draft_backlog', idea }))
-    } catch {
-      setDrafting(false)
-      setError("Couldn't reach Flue — try again.")
-    }
-  }
-
-  async function sendAnswer() {
-    if (answer.trim().length === 0) return
+    if (title.trim().length === 0) return
     setDrafting(true)
     setError(null)
     try {
-      await flue.ready
-      flue.send(JSON.stringify({ type: 'answer', answer }))
-      setAnswer('')
+      const result = await previewBacklog({
+        data: { owner, repo, title, body },
+      })
+      setPreview(result)
     } catch {
+      setError("Couldn't preview the item — try again.")
+    } finally {
       setDrafting(false)
-      setError("Couldn't reach Flue — try again.")
     }
   }
 
@@ -399,57 +313,25 @@ function NewBacklogItem({
     )
   }
 
-  if (question) {
-    return (
-      <div className="move">
-        <h2 className="move__title">New backlog item</h2>
-        <p className="move__hint">Flue has a question before drafting:</p>
-        <p>{question}</p>
-        <textarea
-          className="move__context"
-          placeholder="Your answer…"
-          value={answer}
-          onChange={(e) => setAnswer(e.target.value)}
-        />
-        {error ? <p className="plan-editor__error">{error}</p> : null}
-        <div className="plan-editor__bar">
-          <button
-            type="button"
-            className="btn"
-            onClick={sendAnswer}
-            disabled={drafting || answer.trim().length === 0}
-          >
-            {drafting ? 'Thinking…' : 'Answer'}
-          </button>
-          <button
-            type="button"
-            className="btn btn--ghost"
-            onClick={onClose}
-            disabled={drafting}
-          >
-            Cancel
-          </button>
-        </div>
-      </div>
-    )
-  }
-
   return (
     <div className="move">
       <h2 className="move__title">New backlog item</h2>
-      <p className="muted" style={{ fontSize: 13 }}>
-        Flue: {flueStatus ?? 'connecting…'}
-      </p>
       <p className="move__hint">
-        Describe a rough idea. Flue (grounded in this repo's codebase) drafts a
-        backlog entry — asking a clarifying question first if it needs one —
-        then shows it to you before anything is committed.
+        Write a title and a rough markdown body — this doesn't need to be a
+        finished spec yet. You'll see a preview of the file before anything is
+        committed.
       </p>
+      <input
+        className="move__context"
+        placeholder="Title…"
+        value={title}
+        onChange={(e) => setTitle(e.target.value)}
+      />
       <textarea
         className="move__context"
-        placeholder="A rough idea for something to work on…"
-        value={idea}
-        onChange={(e) => setIdea(e.target.value)}
+        placeholder="A rough sketch of the idea…"
+        value={body}
+        onChange={(e) => setBody(e.target.value)}
       />
       {error ? <p className="plan-editor__error">{error}</p> : null}
       <div className="plan-editor__bar">
@@ -457,9 +339,9 @@ function NewBacklogItem({
           type="button"
           className="btn"
           onClick={draft}
-          disabled={drafting || idea.trim().length === 0}
+          disabled={drafting || title.trim().length === 0}
         >
-          {drafting ? 'Drafting…' : 'Draft with AI'}
+          {drafting ? 'Previewing…' : 'Preview'}
         </button>
         <button
           type="button"
