@@ -49,8 +49,9 @@ Normal flow is one-directional: backlog → ready → in-progress → done.
 
 ## Naming
 
-kebab-case filenames that describe the work (\`add-oauth-login.md\`). Names stay
-stable across the lifecycle; only the directory changes.
+Filenames start with the plan's creation date followed by a descriptive
+kebab-case name (\`2026-01-01-add-oauth-login.md\`). Names stay stable across the
+lifecycle; only the directory changes.
 
 ## Frontmatter
 

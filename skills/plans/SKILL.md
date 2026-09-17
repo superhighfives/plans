@@ -8,7 +8,7 @@ description: >-
   starting and finishing work, tidying, and documenting what was actually built.
 metadata:
   author: superhighfives
-  version: "2.0.0"
+  version: "2.1.0"
 ---
 
 # Plans
@@ -41,7 +41,7 @@ Movement is one-directional in the normal case: `backlog → ready → in-progre
 
 ## Naming
 
-Plans use kebab-case filenames that describe the work: `add-oauth-login.md`, `refactor-queue-consumer.md`. Names stay stable across the lifecycle; only the directory changes.
+Plans use a creation-date prefix followed by a descriptive kebab-case name: `2026-07-01-add-oauth-login.md`, `2026-07-17-refactor-queue-consumer.md`. The prefix uses `YYYY-MM-DD` and matches the plan's `created` date. Names stay stable across the lifecycle; only the directory changes.
 
 ## Frontmatter
 
@@ -56,7 +56,7 @@ updated: 2026-07-17
 ---
 ```
 
-`status` mirrors the directory. Keep `updated` current when you touch the file.
+`status` mirrors the directory. `created` supplies the filename's date prefix. Keep `updated` current when you touch the file.
 
 ## Template
 
@@ -133,23 +133,25 @@ plans/README.md is the source of truth for a project and wins over this skill.
 ```
 
 ### `/plans` (no flag) - status
-Show a summary: counts per directory, list of `in-progress/` plans with their `updated` dates, and any tidy warnings. Bootstrap the structure if missing.
+Show a summary: counts per directory, list of `in-progress/` plans with their `updated` dates, and any tidy warnings. Bootstrap the structure if missing. Before reporting, add missing filename date prefixes and missing `created` or `updated` dates using the repair rules below.
 
 ### `/plans --tidy`
 Audit `plans/` and fix or flag:
 - Frontmatter present and valid on every plan.
+- Every filename starts with a `YYYY-MM-DD` date matching `created`.
+- `created` and `updated` are present and use `YYYY-MM-DD`.
 - `status` matches the directory the file lives in.
 - `updated` is not obviously stale for `in-progress/` items (flag anything older than ~2 weeks).
 - No files sitting outside the four subdirectories.
 - `done/` entries have Overview and Architecture sections.
 
-Fix mechanical issues directly. Surface judgement calls (stalled work, missing docs) as a list for the human.
+Fix mechanical issues directly. For a missing filename prefix, rename the plan using `created`. If `created` is missing, use the earliest Git commit date for that file when available; otherwise use today's date, and add it to frontmatter. If `updated` is missing, use the latest Git commit date when available; otherwise use today's date. Update references to renamed plans. Surface judgement calls (stalled work, missing docs) as a list for the human.
 
 ### `/plans --new <idea>` (alias: `--brainstorm`)
-Explore intent first (use a brainstorming skill if one is available), then write a short plan into `plans/backlog/` with `status: Backlog`. Keep it rough - backlog entries are ideas, not specs.
+Explore intent first (use a brainstorming skill if one is available), then write a short plan into `plans/backlog/` with `status: Backlog`. Prefix its kebab-case filename with today's date and use the same date for `created` and `updated`. Keep it rough - backlog entries are ideas, not specs.
 
 ### `/plans --prepare <idea-or-backlog-file>`
-Promote an idea (either a `backlog/` file or a fresh idea from the argument) into a full spec in `plans/ready/` using the template above. Resolve any open questions before saving as ready.
+Promote an idea (either a `backlog/` file or a fresh idea from the argument) into a full spec in `plans/ready/` using the template above. For a fresh idea, prefix its kebab-case filename with today's date and use the same date for `created` and `updated`. Preserve an existing backlog plan's filename and `created` date. Resolve any open questions before saving as ready.
 
 ### `/plans --start <plan-name>`
 1. Locate the plan in `plans/ready/` (or `backlog/` if the user is skipping ahead).

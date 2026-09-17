@@ -67,6 +67,12 @@ describe('AGENTS block', () => {
   })
 })
 
+describe('plans README template', () => {
+  it('documents creation-date filename prefixes', () => {
+    expect(PLANS_README_TEMPLATE).toContain('2026-01-01-add-oauth-login.md')
+  })
+})
+
 describe('renderStartPage', () => {
   const page = renderStartPage(ORIGIN)
 
