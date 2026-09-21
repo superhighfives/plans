@@ -324,6 +324,7 @@ function NewBacklogItem({
       <input
         className="move__context"
         placeholder="Title…"
+        aria-label="Title"
         value={title}
         onChange={(e) => setTitle(e.target.value)}
       />
