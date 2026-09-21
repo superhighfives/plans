@@ -22,7 +22,7 @@ export interface PlanDetail extends PlanSummary {
   body: string
 }
 
-/** An AI-drafted state move, awaiting the user's approval before it's committed. */
+/** A hand-edited state move, awaiting the user's approval before it's committed. */
 export interface PlanMovePreview {
   title: string
   fromState: PlanState
@@ -45,9 +45,9 @@ export interface PlanMovePreview {
   destinationExists: boolean
 }
 
-/** An AI-drafted new backlog item, awaiting the user's approval before commit. */
+/** A hand-written new backlog item, awaiting the user's approval before commit. */
 export interface NewBacklogPreview {
-  /** The title Claude proposed for the plan. */
+  /** The title the author typed for the plan. */
   title: string
   /** Kebab-case filename slug derived from the title (deduped within backlog/). */
   slug: string

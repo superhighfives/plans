@@ -1,5 +1,4 @@
 import { createFileRoute, Link, useRouter } from '@tanstack/react-router'
-import { useAgent } from 'agents/react'
 import { useEffect, useRef, useState } from 'react'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
@@ -22,6 +21,7 @@ import {
   getPlanSource,
   getPlanView,
   getVerifyMoveStatus,
+  previewMove,
   startVerifyMove,
   updatePlan,
 } from '~/server/repo.functions'
@@ -174,31 +174,10 @@ function PlanPage() {
   )
 }
 
-/** A message Flue can send back over the move draft conversation's WebSocket. */
-interface FlueMoveMessage {
-  type?: string
-  question?: string
-  error?: string
-  title?: string
-  fromState?: PlanState
-  toState?: PlanState
-  oldPath?: string
-  newPath?: string
-  oldContent?: string
-  newContent?: string
-  baseSha?: string
-  diff?: UnifiedDiff
-  warnings?: string[]
-  destinationExists?: boolean
-}
-
 /**
- * Move a plan to another lifecycle state conversationally with Flue. The user
- * picks a target state (plus optional context); Flue (grounded in the repo's
- * cached codebase context) either asks a clarifying question — answered
- * inline, looping until it has enough — or rewrites the body straight away.
- * The diff is then shown for approval before anything is committed (committing
- * still goes through the existing `commitMove` path, unchanged).
+ * Move a plan to another lifecycle state by hand: the author picks a target
+ * state, edits the body themselves (seeded from the plan's current body),
+ * previews the resulting diff, then approves it to commit.
  */
 function PlanMoveControl({
   owner,
@@ -212,15 +191,13 @@ function PlanMoveControl({
   fromState: PlanState
 }) {
   const router = useRouter()
-  const [context, setContext] = useState('')
-  // Which target the author picked — kept through a question/answer round so
-  // the question view can still say what it's moving toward.
+  // Which target the author picked — drives the body-editing step.
   const [draftingTarget, setDraftingTarget] = useState<PlanState | null>(null)
+  const [body, setBody] = useState('')
+  const [loadingSource, setLoadingSource] = useState(false)
   const [busy, setBusy] = useState(false)
-  const [question, setQuestion] = useState<string | null>(null)
-  const [answer, setAnswer] = useState('')
   const [preview, setPreview] = useState<PlanMovePreview | null>(null)
-  // The proposed file, editable before commit. Seeded from the AI draft.
+  // The proposed file, editable before commit. Seeded from the preview.
   const [content, setContent] = useState('')
   const [previewMode, setPreviewMode] = useState<'diff' | 'edit'>('diff')
   const [committing, setCommitting] = useState(false)
@@ -284,88 +261,46 @@ function PlanMoveControl({
     }
   }
 
-  const flue = useAgent({
-    agent: 'flue-agent',
-    name: `${owner}~${repo}`,
-    onMessage: (e) => {
-      let msg: FlueMoveMessage
-      try {
-        msg = JSON.parse(typeof e.data === 'string' ? e.data : '{}')
-      } catch {
-        setBusy(false)
-        setError('Flue sent something unreadable — try again.')
-        return
-      }
-      if (msg.type === 'question' && msg.question) {
-        setBusy(false)
-        setQuestion(msg.question)
-      } else if (msg.type === 'move_preview') {
-        setBusy(false)
-        setQuestion(null)
-        setDraftingTarget(null)
-        const result: PlanMovePreview = {
-          title: msg.title ?? '',
-          fromState: msg.fromState ?? fromState,
-          toState: msg.toState ?? fromState,
-          oldPath: msg.oldPath ?? path,
-          newPath: msg.newPath ?? path,
-          oldContent: msg.oldContent ?? '',
-          newContent: msg.newContent ?? '',
-          baseSha: msg.baseSha ?? '',
-          diff: msg.diff ?? unifiedDiff('', ''),
-          warnings: msg.warnings ?? [],
-          destinationExists: msg.destinationExists ?? false,
-        }
-        setPreview(result)
-        setContent(result.newContent)
-        setPreviewMode('diff')
-        resetVerify()
-      } else if (msg.type === 'error') {
-        setBusy(false)
-        setError("Flue couldn't draft the move — try again.")
-      }
-    },
-    onError: () => {
-      setBusy(false)
-      setError('Lost connection to Flue — try again.')
-    },
-  })
-
-  async function draft(toState: PlanState) {
+  /** Pick a target state: load the plan's current body to seed the editor. */
+  async function pickTarget(toState: PlanState) {
     setDraftingTarget(toState)
-    setBusy(true)
+    setLoadingSource(true)
     setError(null)
     setPreview(null)
-    setQuestion(null)
     resetVerify()
     try {
-      await flue.ready
-      flue.send(JSON.stringify({ type: 'draft_move', path, toState, context }))
+      const source = await getPlanSource({ data: { owner, repo, path } })
+      setBody(parseFrontmatter(source.content).content)
     } catch {
-      setBusy(false)
       setDraftingTarget(null)
-      setError("Couldn't reach Flue — try again.")
+      setError("Couldn't load this plan for editing.")
+    } finally {
+      setLoadingSource(false)
     }
   }
 
-  async function sendAnswer() {
-    if (answer.trim().length === 0) return
+  async function doPreview() {
+    if (!draftingTarget) return
     setBusy(true)
     setError(null)
     try {
-      await flue.ready
-      flue.send(JSON.stringify({ type: 'answer', answer }))
-      setAnswer('')
+      const result = await previewMove({
+        data: { owner, repo, path, toState: draftingTarget, newBody: body },
+      })
+      setPreview(result)
+      setContent(result.newContent)
+      setPreviewMode('diff')
+      resetVerify()
     } catch {
+      setError("Couldn't preview the move — try again.")
+    } finally {
       setBusy(false)
-      setError("Couldn't reach Flue — try again.")
     }
   }
 
   function cancelDraft() {
-    setQuestion(null)
     setDraftingTarget(null)
-    setAnswer('')
+    setBody('')
     setError(null)
   }
 
@@ -507,30 +442,35 @@ function PlanMoveControl({
     )
   }
 
-  if (question) {
+  if (draftingTarget) {
     return (
       <div className="move">
         <h2 className="move__title">
-          Move to{' '}
-          {draftingTarget ? PLAN_STATE_LABELS[draftingTarget] : 'new state'}
+          Move to {PLAN_STATE_LABELS[draftingTarget]}
         </h2>
-        <p className="move__hint">Flue has a question before rewriting:</p>
-        <p>{question}</p>
-        <textarea
-          className="move__context"
-          placeholder="Your answer…"
-          value={answer}
-          onChange={(e) => setAnswer(e.target.value)}
-        />
+        <p className="move__hint">
+          Edit the body for its new state, then preview the resulting diff.
+        </p>
+        {loadingSource ? (
+          <p className="branch-notice">Loading plan…</p>
+        ) : (
+          <textarea
+            className="plan-editor__area"
+            value={body}
+            spellCheck={false}
+            onChange={(e) => setBody(e.target.value)}
+            aria-label="Plan body for its new state"
+          />
+        )}
         {error ? <p className="plan-editor__error">{error}</p> : null}
         <div className="plan-editor__bar">
           <button
             type="button"
             className="btn"
-            onClick={sendAnswer}
-            disabled={busy || answer.trim().length === 0}
+            onClick={doPreview}
+            disabled={busy || loadingSource}
           >
-            {busy ? 'Thinking…' : 'Answer'}
+            {busy ? 'Previewing…' : 'Preview'}
           </button>
           <button
             type="button"
@@ -547,30 +487,20 @@ function PlanMoveControl({
 
   return (
     <div className="move">
-      <h2 className="move__title">Move with AI</h2>
+      <h2 className="move__title">Move</h2>
       <p className="move__hint">
-        Flue (grounded in this repo's codebase) rewrites the plan for its new
-        state — asking a clarifying question first if it needs one — then shows
-        you a diff to approve before anything is committed.
+        Pick a target state, edit the body yourself, then preview the diff
+        before anything is committed.
       </p>
-      <textarea
-        className="move__context"
-        placeholder="Optional: extra context to steer the rewrite…"
-        value={context}
-        onChange={(e) => setContext(e.target.value)}
-      />
       <div className="move__targets">
         {targets.map((s) => (
           <button
             key={s}
             type="button"
             className="btn btn--ghost"
-            onClick={() => draft(s)}
-            disabled={busy}
+            onClick={() => pickTarget(s)}
           >
-            {busy && draftingTarget === s
-              ? 'Drafting…'
-              : `→ ${PLAN_STATE_LABELS[s]}`}
+            {`→ ${PLAN_STATE_LABELS[s]}`}
           </button>
         ))}
       </div>

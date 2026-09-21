@@ -18,22 +18,10 @@
       "migrations_dir": "migrations"
     }
   ],
-  // Workers AI binding — Claude calls run through it, routed via the AI Gateway
-  // named in CF_AI_GATEWAY_ID. Auth + Unified Billing ride on the account, so no
-  // gateway token or Anthropic key is needed. `remote: true` because Workers AI
-  // has no local emulation — dev must proxy to the real API (see remoteBindings
-  // in vite.config.ts, which authenticates via wrangler login / CLOUDFLARE_*).
-  "ai": { "binding": "AI", "remote": true },
-  // Flue conversational agent — one Durable Object instance per repo. Agents
-  // SDK requires SQLite-backed DOs (new_sqlite_classes).
-  //
-  // Sandbox — one ephemeral container per verify run (slice 5: "move to done"
-  // runs the repo's own test/build scripts before committing). See Dockerfile.
+  // Sandbox — one ephemeral container per verify run ("move to done" runs the
+  // repo's own test/build scripts before committing). See Dockerfile.
   "durable_objects": {
-    "bindings": [
-      { "name": "FlueAgent", "class_name": "FlueAgent" },
-      { "name": "Sandbox", "class_name": "Sandbox" }
-    ]
+    "bindings": [{ "name": "Sandbox", "class_name": "Sandbox" }]
   },
   "containers": [
     {
@@ -54,16 +42,18 @@
     }
   ],
   // Migrations are append-only — each new Durable Object class gets its own
-  // tag rather than editing an already-applied one.
+  // tag rather than editing an already-applied one. `deleted_classes` frees up
+  // an already-applied class's storage rather than just dropping its binding.
   "migrations": [
     { "tag": "v1", "new_sqlite_classes": ["FlueAgent"] },
-    { "tag": "v2", "new_sqlite_classes": ["Sandbox"] }
+    { "tag": "v2", "new_sqlite_classes": ["Sandbox"] },
+    { "tag": "v3", "deleted_classes": ["FlueAgent"] }
   ],
   // Secrets (set with `wrangler secret put <NAME>` for production, or in
   // `.dev.vars` for local dev — see .dev.vars.example):
   //   GITHUB_APP_ID, GITHUB_APP_CLIENT_ID, GITHUB_APP_CLIENT_SECRET,
   //   GITHUB_APP_PRIVATE_KEY, GITHUB_WEBHOOK_SECRET,
-  //   SESSION_SECRET, TOKEN_ENCRYPTION_KEY, APP_URL, CF_AI_GATEWAY_ID
+  //   SESSION_SECRET, TOKEN_ENCRYPTION_KEY, APP_URL
   //
   // Stable preview environment (`wrangler deploy --env preview`, or
   // `npm run deploy:preview`) → the `plans-preview` Worker on its own domain,
@@ -86,12 +76,8 @@
           "migrations_dir": "migrations"
         }
       ],
-      "ai": { "binding": "AI", "remote": true },
       "durable_objects": {
-        "bindings": [
-          { "name": "FlueAgent", "class_name": "FlueAgent" },
-          { "name": "Sandbox", "class_name": "Sandbox" }
-        ]
+        "bindings": [{ "name": "Sandbox", "class_name": "Sandbox" }]
       },
       "containers": [
         {
@@ -110,7 +96,8 @@
       ],
       "migrations": [
         { "tag": "v1", "new_sqlite_classes": ["FlueAgent"] },
-        { "tag": "v2", "new_sqlite_classes": ["Sandbox"] }
+        { "tag": "v2", "new_sqlite_classes": ["Sandbox"] },
+        { "tag": "v3", "deleted_classes": ["FlueAgent"] }
       ]
     }
   }

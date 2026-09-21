@@ -1,7 +1,6 @@
 import { env as cfEnv } from 'cloudflare:workers'
 import type { Sandbox } from '@cloudflare/sandbox'
 import type {
-  Ai,
   D1Database,
   DurableObjectNamespace,
   Workflow,
@@ -20,13 +19,7 @@ export interface AppEnv {
   /** D1 database binding. */
   DB: D1Database
 
-  /** Workers AI binding — used for Claude calls routed through the AI Gateway. */
-  AI: Ai
-
-  /** Flue conversational agent — one Durable Object instance per repo. */
-  FlueAgent: DurableObjectNamespace
-
-  /** One ephemeral container per verify-plan-move run (slice 5). */
+  /** One ephemeral container per verify-plan-move run. */
   Sandbox: DurableObjectNamespace<Sandbox>
 
   /** Clones a repo, installs deps, and runs its test/build scripts before a
@@ -51,13 +44,6 @@ export interface AppEnv {
 
   /** Public origin of this deployment, e.g. https://plans.example.com (no trailing slash). */
   APP_URL: string
-
-  /**
-   * The AI Gateway id (its slug) to route Claude calls through. Auth and billing
-   * ride on the `AI` binding (the Worker's own account + Unified Billing), so no
-   * account id, gateway token, or Anthropic API key lives in this app.
-   */
-  CF_AI_GATEWAY_ID: string
 }
 
 /** Read the typed Worker environment. Per-request only. */
